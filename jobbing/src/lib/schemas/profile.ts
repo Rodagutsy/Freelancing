@@ -1,8 +1,15 @@
 import { z } from "zod";
 import { nonEmptyText, optionalUrlSchema, textArraySchema } from "@/lib/schemas/common";
 
+export const PILLAR_VALUES = ["design", "build", "automation", "growth"] as const;
+
+export const pillarSchema = z.enum(PILLAR_VALUES);
+
+export type PersonaPillar = (typeof PILLAR_VALUES)[number];
+
 export const profileInputSchema = z
   .object({
+    label: nonEmptyText.max(100),
     name: nonEmptyText.max(200),
     headline: nonEmptyText.max(200),
     bio: z.string().trim().max(5000).nullable().optional(),
@@ -29,4 +36,11 @@ export const profileInputSchema = z
     },
   );
 
+/** New persona creation: label + pillar only; the rest is filled in later. */
+export const personaCreateSchema = z.object({
+  label: nonEmptyText.max(100),
+  pillar: pillarSchema,
+});
+
 export type ProfileInput = z.infer<typeof profileInputSchema>;
+export type PersonaCreateInput = z.infer<typeof personaCreateSchema>;

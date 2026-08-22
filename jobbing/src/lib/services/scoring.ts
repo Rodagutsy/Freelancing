@@ -2,16 +2,18 @@ import { chatJson } from "@/lib/ai/deepseek";
 import { buildScoringMessages } from "@/lib/ai/prompts";
 import { scoreOutputSchema } from "@/lib/schemas/proposal";
 import { listPortfolioProjects } from "@/lib/services/portfolio";
-import { getProfile } from "@/lib/services/settings";
+import { resolveProfile } from "@/lib/services/settings";
 import type { DatabaseClient, JobRow, JobScoreRow } from "@/lib/types";
 
 /**
- * Scores a job against Dee's profile and portfolio (mirrors the n8n M2
- * scoring step so jobs added manually get the same treatment as email alerts).
+ * Scores a job against a persona (default persona when no id is given) and the
+ * shared portfolio. Mirrors the n8n scoring workflow so jobs added manually get
+ * the same treatment as automated intake.
  */
 export async function scoreJob(
   client: DatabaseClient,
   jobId: string,
+  profileId?: string,
 ): Promise<JobScoreRow> {
   const { data: jobData, error: jobError } = await client
     .from("jobs")
@@ -26,12 +28,7 @@ export async function scoreJob(
     throw new Error("Job not found.");
   }
 
-  const profile = await getProfile(client);
-  if (!profile) {
-    throw new Error(
-      "Your profile is required to score jobs. Add it in Settings first.",
-    );
-  }
+  const profile = await resolveProfile(client, profileId);
 
   const projects = await listPortfolioProjects(client);
   const { system, user } = buildScoringMessages(

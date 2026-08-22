@@ -9,7 +9,7 @@ import { createClient, requireUser } from "@/lib/supabase/server";
 import { applicationUpdateSchema } from "@/lib/schemas/application";
 import { addJobInputSchema } from "@/lib/schemas/job";
 import { portfolioProjectInputSchema } from "@/lib/schemas/portfolio";
-import { profileInputSchema } from "@/lib/schemas/profile";
+import { personaCreateSchema, profileInputSchema } from "@/lib/schemas/profile";
 import { regenerateInstructionSchema } from "@/lib/schemas/proposal";
 import { uuidSchema } from "@/lib/schemas/common";
 import { getApplicationForJob, createApplication, updateApplication } from "@/lib/services/applications";
@@ -19,7 +19,13 @@ import { listJobs } from "@/lib/services/jobs";
 import { getLatestProposal, generateProposal } from "@/lib/services/proposals";
 import { createPortfolioProject, deletePortfolioProject, updatePortfolioProject } from "@/lib/services/portfolio";
 import { scoreJob } from "@/lib/services/scoring";
-import { upsertProfile } from "@/lib/services/settings";
+import {
+  createProfile,
+  deleteProfile,
+  getDefaultProfile,
+  setDefaultProfile,
+  upsertProfile,
+} from "@/lib/services/settings";
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -294,6 +300,7 @@ export async function addJob(
 export async function generateProposalAction(
   jobId: string,
   instruction?: string,
+  profileId?: string,
 ): Promise<
   ActionResult<{
     proposalId: string;
@@ -314,6 +321,17 @@ export async function generateProposalAction(
     return { ok: false, error: "Choose a valid regeneration instruction." };
   }
 
+  let personaId: string | undefined = profileId;
+  if (personaId !== undefined && personaId !== "") {
+    const parsedPersona = uuidSchema.safeParse(personaId);
+    if (!parsedPersona.success) {
+      return { ok: false, error: "Invalid persona id." };
+    }
+    personaId = parsedPersona.data;
+  } else {
+    personaId = undefined;
+  }
+
   const user = await requireUser();
   if (!user) return { ok: false, error: "You must be signed in." };
 
@@ -323,6 +341,7 @@ export async function generateProposalAction(
       supabase,
       parsedId.data,
       parsedInstruction?.data,
+      personaId,
     );
 
     revalidatePath("/jobs/[id]", "page");
@@ -341,14 +360,92 @@ export async function generateProposalAction(
   }
 }
 
+/** Re-scores a job with the given persona (default persona when omitted). */
+export async function rescoreJobAction(
+  jobId: string,
+  profileId?: string,
+): Promise<
+  ActionResult<{ scoreTotal: number; recommendation: string; personaLabel?: string }>
+> {
+  const parsedId = uuidSchema.safeParse(jobId);
+  if (!parsedId.success) return { ok: false, error: "Invalid job id." };
+
+  let personaId: string | undefined = profileId;
+  if (personaId !== undefined && personaId !== "") {
+    const parsedPersona = uuidSchema.safeParse(personaId);
+    if (!parsedPersona.success) return { ok: false, error: "Invalid persona id." };
+    personaId = parsedPersona.data;
+  } else {
+    personaId = undefined;
+  }
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const score = await scoreJob(supabase, parsedId.data, personaId);
+    revalidatePath("/jobs/[id]", "page");
+    revalidatePath("/dashboard");
+    return {
+      ok: true,
+      data: {
+        scoreTotal: Number(score.score_total),
+        recommendation: score.recommendation,
+      },
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 /* ------------------------------------------------------------------ */
-/* Settings (profile)                                                  */
+/* Settings (personas)                                                 */
 /* ------------------------------------------------------------------ */
 
 export async function saveProfile(
   input: z.infer<typeof profileInputSchema>,
+  profileId?: string,
 ): Promise<ActionResult> {
   const parsed = profileInputSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  let targetId: string | undefined = profileId;
+  if (targetId !== undefined) {
+    const parsedId = uuidSchema.safeParse(targetId);
+    if (!parsedId.success) return { ok: false, error: "Invalid persona id." };
+    targetId = parsedId.data;
+  }
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    if (!targetId) {
+      // Legacy single-form callers update the default persona.
+      const fallback = await getDefaultProfile(supabase);
+      if (!fallback) {
+        return {
+          ok: false,
+          error: "No persona found yet — create one first.",
+        };
+      }
+      targetId = fallback.id;
+    }
+    await upsertProfile(supabase, parsed.data, targetId);
+    revalidatePath("/settings");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function createPersonaAction(
+  input: z.infer<typeof personaCreateSchema>,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = personaCreateSchema.safeParse(input);
   if (!parsed.success) return fail(parsed.error);
 
   const user = await requireUser();
@@ -356,7 +453,46 @@ export async function saveProfile(
 
   try {
     const supabase = await createClient();
-    await upsertProfile(supabase, parsed.data);
+    const persona = await createProfile(supabase, parsed.data);
+    revalidatePath("/settings");
+    return { ok: true, data: { id: persona.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function setDefaultPersonaAction(
+  personaId: string,
+): Promise<ActionResult> {
+  const parsedId = uuidSchema.safeParse(personaId);
+  if (!parsedId.success) return { ok: false, error: "Invalid persona id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await setDefaultProfile(supabase, parsedId.data);
+    revalidatePath("/settings");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deletePersonaAction(
+  personaId: string,
+): Promise<ActionResult> {
+  const parsedId = uuidSchema.safeParse(personaId);
+  if (!parsedId.success) return { ok: false, error: "Invalid persona id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await deleteProfile(supabase, parsedId.data);
     revalidatePath("/settings");
     return { ok: true };
   } catch (error) {

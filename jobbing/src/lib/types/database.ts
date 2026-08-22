@@ -22,6 +22,10 @@ export interface ProfileRow {
   linkedin_url: string | null;
   upwork_profile_url: string | null;
   website_url: string | null;
+  label: string;
+  pillar: "design" | "build" | "automation" | "growth" | null;
+  is_default: boolean;
+  sort_order: number;
   created_at: string;
   updated_at: string;
 }
@@ -119,6 +123,7 @@ export interface JobFeedRow extends JobRow {
   explanation: string | null;
   factors: ScoreFactor | null;
   score_created_at: string | null;
+  score_profile_id: string | null;
   proposal_id: string | null;
   proposal_draft_text: string | null;
   proposal_angle: string | null;

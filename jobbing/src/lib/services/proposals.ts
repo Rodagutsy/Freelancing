@@ -7,7 +7,7 @@ import {
 import type { DatabaseClient, ProposalRow } from "@/lib/types";
 import { matchPortfolioProjects } from "@/lib/services/jobs";
 import { listPortfolioProjects } from "@/lib/services/portfolio";
-import { getProfile } from "@/lib/services/settings";
+import { resolveProfile } from "@/lib/services/settings";
 import type { JobRow } from "@/lib/types";
 
 export async function getLatestProposal(
@@ -31,12 +31,14 @@ export async function getLatestProposal(
 
 /**
  * Generates (or regenerates) a tailored proposal for a job using DeepSeek.
+ * Drafts with the given persona, or the default persona when none is passed.
  * AI output is validated against a Zod schema before being stored.
  */
 export async function generateProposal(
   client: DatabaseClient,
   jobId: string,
   instruction?: RegenerateInstruction,
+  profileId?: string,
 ): Promise<ProposalRow> {
   const { data: jobData, error: jobError } = await client
     .from("jobs")
@@ -51,12 +53,7 @@ export async function generateProposal(
     throw new Error("Job not found.");
   }
 
-  const profile = await getProfile(client);
-  if (!profile) {
-    throw new Error(
-      "Your profile is required to draft a proposal. Add it in Settings first.",
-    );
-  }
+  const profile = await resolveProfile(client, profileId);
 
   const projects = await listPortfolioProjects(client);
   const matched = matchPortfolioProjects(projects, jobData.skills_requested);
