@@ -1,0 +1,65 @@
+.wrap {
+  display: flex;
+}
+
+.alignEnd {
+  justify-content: flex-end;
+}
+
+.alignStart {
+  justify-content: flex-start;
+}
+
+.icon {
+  width: 18px;
+  height: 18px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.budgetRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.statusRow {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-secondary);
+}
+
+.statusOk {
+  color: var(--success);
+}
+
+.statusError {
+  color: var(--danger);
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.submit {
+  width: 100%;
+}
+
+@media (max-width: 420px) {
+  .budgetRow {
+    grid-template-columns: 1fr;
+  }
+}

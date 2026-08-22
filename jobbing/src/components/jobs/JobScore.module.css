@@ -1,0 +1,26 @@
+.score {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-1);
+  color: var(--gold-500);
+  font-weight: 900;
+  line-height: var(--text-score-lh);
+  font-size: var(--text-score);
+  font-variant-numeric: tabular-nums;
+}
+
+.sm {
+  font-size: var(--text-h2);
+  line-height: var(--text-h2-lh);
+}
+
+.value {
+  font-weight: 900;
+}
+
+.max {
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 700;
+  color: var(--text-muted);
+}

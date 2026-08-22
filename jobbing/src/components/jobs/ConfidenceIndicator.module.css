@@ -1,0 +1,19 @@
+.confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-secondary);
+}
+
+.icon {
+  width: 16px;
+  height: 16px;
+  color: var(--gold-500);
+  flex-shrink: 0;
+}
+
+.note {
+  color: var(--text-muted);
+}

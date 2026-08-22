@@ -1,0 +1,126 @@
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.note {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-muted);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.label {
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.count {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.countWarn {
+  color: var(--warning);
+}
+
+.textarea {
+  width: 100%;
+  min-height: 260px;
+  padding: var(--space-3);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  resize: vertical;
+}
+
+.textarea:focus {
+  outline: 2px solid var(--gold-400);
+  outline-offset: 2px;
+  border-color: var(--border-strong);
+}
+
+.textarea:disabled {
+  color: var(--text-muted);
+}
+
+.angle {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-secondary);
+}
+
+.angleLabel {
+  font-weight: 700;
+  color: var(--gold-400);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.actionIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.regenerate {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.regenerateLabel {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: var(--bg-surface);
+}
+
+.chip:hover:not(:disabled) {
+  border-color: var(--gold-700);
+  color: var(--gold-400);
+  background: var(--bg-surface-raised);
+}
+
+.chip:disabled {
+  color: var(--text-muted);
+}
+
+.regenerateIcon {
+  width: 16px;
+  height: 16px;
+  color: var(--text-muted);
+}

@@ -1,0 +1,82 @@
+/* ============================================================
+   Upwork Radar — Design Tokens (V1)
+   Source of truth: upwork_radar_design_guardrails.md §4
+   ============================================================ */
+
+:root {
+  /* ---- Color system (dark theme only) ---- */
+  --bg-canvas: #0b0b0b;
+  --bg-surface: #121212;
+  --bg-surface-raised: #191919;
+  --bg-input: #101010;
+
+  --border-subtle: #2a2a2a;
+  --border-strong: #454545;
+
+  --text-primary: #ffffff;
+  --text-secondary: #c9c9c9;
+  --text-muted: #949494;
+
+  --gold-500: #d4af37;
+  --gold-400: #e6c85c;
+  --gold-700: #9a7a16;
+
+  --success: #36b37e;
+  --warning: #e7a62b;
+  --danger: #e0565b;
+  --info: #5aa9e6;
+
+  /* ---- Typography scale (px / line-height / weight) ---- */
+  --text-display: 32px;
+  --text-display-lh: 40px;
+  --text-h1: 24px;
+  --text-h1-lh: 32px;
+  --text-h2: 20px;
+  --text-h2-lh: 28px;
+  --text-h3: 16px;
+  --text-h3-lh: 24px;
+  --text-body: 15px;
+  --text-body-lh: 24px;
+  --text-body-sm: 14px;
+  --text-body-sm-lh: 20px;
+  --text-label: 13px;
+  --text-label-lh: 18px;
+  --text-meta: 12px;
+  --text-meta-lh: 16px;
+  --text-score: 36px;
+  --text-score-lh: 40px;
+
+  /* ---- Spacing: strict 4px grid ---- */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ---- Radii ---- */
+  --radius-sm: 6px; /* inputs, buttons, tags */
+  --radius-md: 8px; /* cards, panels, modals */
+  --radius-pill: 9999px;
+
+  /* ---- Focus ring ---- */
+  --focus-ring: 2px solid var(--gold-400);
+  --focus-ring-offset: 2px;
+
+  /* ---- Layout ---- */
+  --sidebar-width: 248px;
+  --content-max: 1440px;
+  --content-pad-desktop: 32px;
+  --content-pad-tablet: 24px;
+  --content-pad-mobile: 16px;
+
+  /* ---- Motion ---- */
+  --transition-fast: 150ms ease-out;
+
+  /* ---- Fonts ---- */
+  --font-body: var(--font-lato), "Lato", "Segoe UI", system-ui, sans-serif;
+}

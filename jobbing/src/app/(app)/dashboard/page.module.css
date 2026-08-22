@@ -1,0 +1,145 @@
+.strip {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.stripItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.stripIcon {
+  width: 24px;
+  height: 24px;
+  flex-shrink: 0;
+}
+
+.success {
+  color: var(--success);
+}
+
+.warning {
+  color: var(--warning);
+}
+
+.danger {
+  color: var(--danger);
+}
+
+.stripValue {
+  font-size: var(--text-h2);
+  line-height: var(--text-h2-lh);
+  font-weight: 900;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stripLabel {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-secondary);
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  margin-bottom: var(--space-8);
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.sectionTitle {
+  font-size: var(--text-h2);
+  line-height: var(--text-h2-lh);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.sectionLink {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-height: 44px;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-sm);
+  color: var(--gold-500);
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 700;
+}
+
+.sectionLink:hover {
+  color: var(--gold-400);
+  background: var(--bg-surface-raised);
+}
+
+.sectionLinkIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.jobList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.metrics {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-3);
+  margin-top: var(--space-8);
+}
+
+.metric {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-5);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.metricValue {
+  font-size: var(--text-h2);
+  line-height: var(--text-h2-lh);
+  font-weight: 900;
+  color: var(--gold-500);
+  font-variant-numeric: tabular-nums;
+}
+
+.metricLabel {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-secondary);
+}
+
+@media (min-width: 640px) {
+  .strip {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .metrics {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+@media (max-width: 639px) {
+  .metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

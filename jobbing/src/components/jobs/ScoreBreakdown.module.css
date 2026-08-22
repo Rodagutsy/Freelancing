@@ -1,0 +1,71 @@
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.none {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-muted);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 1fr 48px;
+  grid-template-rows: auto auto;
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+}
+
+.labelRow {
+  grid-column: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.label {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+.weight {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.barTrack {
+  grid-column: 1;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+
+.barFill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--gold-500);
+}
+
+.barDanger {
+  background: var(--danger);
+}
+
+.value {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

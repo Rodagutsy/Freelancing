@@ -1,0 +1,231 @@
+{
+  "name": "01 - Intake (Gmail -> jobs)",
+  "nodes": [
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute",
+              "minute": 1
+            }
+          ]
+        },
+        "simulate": false,
+        "filters": {
+          "label": "",
+          "unreadOnly": false,
+          "includeSpamTrash": false,
+          "customEmailConfig": "from:(jobs@upwork.com OR noreply@upwork.com OR mailer@upwork.com) subject:Upwork newer_than:3d"
+        },
+        "options": {}
+      },
+      "id": "e6a0f2c1-9d4b-4b7a-8f2c-3a1e9d0b6c2f",
+      "name": "Gmail Trigger",
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "notes": "Connect your Gmail account (OAuth2) on this node. The search query only matches Upwork saved-search alert emails.\n\nSPEED CONTROL: this node polls Gmail every 1 minute for near-instant intake. But the real bottleneck is Upwork, not n8n: your saved-search alert frequency must be set to IMMEDIATE on Upwork (Job Settings -> Job alerts -> Frequency -> Immediately). If Upwork batches emails, no polling rate will help."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Upwork Radar M1 - parse a saved-search alert email into a job object.\n// Input: one Gmail message with fields subject, from, date, textAsHtml, textAsPlain.\n// Output: { job: {..DB columns..} } on success, or { parseError, raw_email, job } if critical fields are missing.\n\nconst email = $input.first().json;\nconst subject = String(email.subject || email.subjectLine || '');\nconst html = String(email.textAsHtml || email.html || '');\nconst text = String(email.textAsPlain || email.text || '').replace(/\\u00a0/g, ' ');\n\nfunction cleanText(value) {\n  return String(value || '')\n    .replace(/<[^>]+>/g, ' ')\n    .replace(/&nbsp;/g, ' ')\n    .replace(/&amp;/g, '&')\n    .replace(/\\s+/g, ' ')\n    .trim();\n}\n\n// ---- Title: prefer the subject line ----\nlet title = cleanText(subject)\n  .replace(/^(new job posting( for your search)?|job opportunity|upwork)\\s*[:.\\-]\\s*/i, '');\nif (!title || title.length < 3) {\n  const m = html.match(/<strong>\\s*Title\\s*<\\/strong>\\s*<[^>]*>([^<]+)/i)\n    || text.match(/title\\s*[:.-]\\s*(.+)/i);\n  if (m) title = cleanText(m[1]);\n}\n\n// ---- URL: find the \"View Job Posting\" link ----\nlet url = '';\nconst linkMatch = html.match(/href=\"([^\"]+)\"[^>]*>\\s*(?:view (?:the )?job|job posting|apply now)/i)\n  || html.match(/href=\"(https:\\/\\/www\\.upwork\\.com\\/jobs\\/[^\"]+)\"/i);\nif (linkMatch) url = linkMatch[1].replace(/&amp;/g, '&');\n\n// ---- Description: strip tags, cut Upwork footer noise ----\nlet description = cleanText(html);\ndescription = description\n  .replace(/\\b(you are receiving this email|this email was sent by upwork|unsubscribe|privacy policy|see more job postings|\\d+\\s+jobs? are currently available)\\b.*$/i, '')\n  .trim();\nif (!description || description.length < 20) description = cleanText(text);\n\n// ---- Skills (best effort) ----\nlet skills = [];\nconst skillsMatch = text.match(/skills\\s*[:.-]\\s*(.+?)(?:\\n\\s*\\n|\\n\\s*[a-z_]+\\s*:)/is)\n  || html.match(/Skills:\\s*<\\/[^>]+>\\s*(.*?)</is);\nif (skillsMatch) {\n  skills = cleanText(skillsMatch[1])\n    .split(',')\n    .map((s) => s.trim())\n    .filter(Boolean)\n    .slice(0, 20);\n}\nif (skills.length === 0) {\n  const known = ['n8n', 'GoHighLevel', 'make', 'zapier', 'api', 'automation', 'javascript', 'python', 'react', 'wordpress', 'shopify', 'ai', 'gpt', 'openai', 'google sheets', 'webflow', 'notion', 'airtable', 'chatgpt', 'prompt', 'workflow', 'saas'];\n  skills = known.filter((s) => new RegExp('\\\\b' + s + '\\\\b', 'i').test(text));\n}\n\n// ---- Budget ----\nlet budgetType = null, budgetMin = null, budgetMax = null;\nconst hourly = text.match(/hourly\\s*[:.-]?\\s*\\$?\\s*(\\d+(?:\\.\\d+)?)\\s*-\\s*\\$?\\s*(\\d+(?:\\.\\d+)?)\\s*\\/\\s*hr/i)\n  || html.match(/Hourly Range:\\s*<[^>]+>\\s*\\$([\\d.,]+)\\s*-\\s*\\$([\\d.,]+)/i);\nconst fixed = text.match(/budget\\s*[:.-]?\\s*\\$?\\s*(\\d+(?:\\.\\d+)?)\\s*-\\s*\\$?\\s*(\\d+(?:\\.\\d+)?)/i)\n  || html.match(/Budget:\\s*<[^>]+>\\s*\\$([\\d.,]+)\\s*-\\s*\\$([\\d.,]+)/i);\nconst num = (s) => { const n = parseFloat(String(s || '').replace(/,/g, '')); return Number.isFinite(n) ? n : null; };\nif (hourly) { budgetType = 'hourly'; budgetMin = num(hourly[1]); budgetMax = num(hourly[2]); }\nelse if (fixed) { budgetType = 'fixed'; budgetMin = num(fixed[1]); budgetMax = num(fixed[2]); }\n\n// ---- Client stats ----\nconst rating = text.match(/(\\d(?:\\.\\d)?)\\s*\\(\\s*(\\d+)\\s*reviews?\\s*\\)/i)\n  || html.match(/(\\d(?:\\.\\d)?)\\s*\\(\\s*(\\d+)\\s*reviews?\\s*\\)/i);\nconst clientRating = rating ? num(rating[1]) : null;\nconst clientReviews = rating ? parseInt(rating[2], 10) : null;\nconst jobsPosted = (text.match(/(\\d+)\\s*jobs?\\s*posted/i) || html.match(/(\\d+)\\s*jobs?\\s*posted/i) || [])[1] ?? null;\nconst proposals = (text.match(/(\\d+)\\s*proposals?/i) || html.match(/(\\d+)\\s*proposals?/i) || [])[1] ?? null;\n\n// ---- Posted date ----\nlet postedAt = null;\nconst postedMatch = text.match(/(?:posted|listed)\\s*(?:on\\s*)?([a-z]+\\s+\\d{1,2}[a-z]{2},\\s*\\d{4})/i)\n  || html.match(/Posted on\\s*<[^>]+>\\s*([^<]+)</i);\nif (postedMatch) {\n  const d = new Date(postedMatch[1]);\n  if (!Number.isNaN(d.getTime())) postedAt = d.toISOString();\n}\n\nconst job = {\n  source: 'upwork_email',\n  raw_payload: { subject, from: email.from, received_at: email.date || email.received || null },\n  title: title || null,\n  description: description || null,\n  skills_requested: skills,\n  budget_min: budgetMin,\n  budget_max: budgetMax,\n  budget_type: budgetType,\n  client_rating: clientRating,\n  client_reviews_count: clientReviews,\n  client_jobs_posted: jobsPosted ? parseInt(jobsPosted, 10) : null,\n  client_hire_rate: null,\n  proposals_count: proposals,\n  posted_at: postedAt || email.date || new Date().toISOString(),\n  url: url || null,\n  ingested_at: new Date().toISOString()\n};\n\nconst missing = ['title', 'url', 'description'].filter((k) => !job[k]);\nif (missing.length > 0) {\n  return {\n    parseError: 'missing fields: ' + missing.join(', '),\n    raw_email: { subject, text: text.slice(0, 2000), html: html.slice(0, 2000) },\n    job\n  };\n}\nreturn { job };"
+      },
+      "id": "f7b1a3d2-0e6f-4a8b-9d3c-4b2f1a0e8c7d",
+      "name": "Parse Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        280,
+        0
+      ],
+      "notes": "Tune the regexes to the exact layout of your Upwork alert emails."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+              "leftValue": "={{!$json.parseError}}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8c2d4e6f-1a2b-4c3d-8e5f-9a0b1c2d3e4f",
+      "name": "Valid Parse",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        560,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/jobs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.job)}}",
+        "options": {}
+      },
+      "id": "9d3e5f7a-2b3c-4d4e-9f6a-0b1c2d3e4f5a",
+      "name": "Insert Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        840,
+        200
+      ],
+      "notes": "PostgREST upsert keyed on the unique jobs.url index (00_extensions.sql). Re-runs do not create duplicates."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/manual_review_queue",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ error_reason: $json.parseError, raw_email: $json.raw_email || { subject: '', text: '', html: '' }, job: $json.job || null })}}",
+        "options": {}
+      },
+      "id": "0e4f6a8b-3c4d-4e5f-8a7b-1c2d3e4f5a6b",
+      "name": "Manual Review",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        840,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "workflowId": "02 - Scoring (jobs -> job_scores)",
+        "options": {
+          "passInputData": true
+        }
+      },
+      "id": "1f5a7b9c-4d5e-4f6a-9b8c-2d3e4f5a6b7c",
+      "name": "Run Scoring",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 2.3,
+      "position": [
+        1120,
+        200
+      ],
+      "notes": "AFTER IMPORT: open this node and select the \"02 - Scoring\" workflow in the dropdown, then save."
+    }
+  ],
+  "connections": {
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Parse Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Email": {
+      "main": [
+        [
+          {
+            "node": "Valid Parse",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Valid Parse": {
+      "main": [
+        [
+          {
+            "node": "Insert Job",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Manual Review",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Insert Job": {
+      "main": [
+        [
+          {
+            "node": "Run Scoring",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}
