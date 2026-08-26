@@ -12,6 +12,14 @@
   color: var(--text-primary);
 }
 
+.sectionHint {
+  margin: 0;
+  max-width: 72ch;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-secondary);
+}
+
 .card {
   padding: var(--space-6);
   background: var(--bg-surface);

@@ -1,8 +1,8 @@
 # Upwork Radar
 
-A personal opportunity-intelligence dashboard for Upwork. Gmail saved-search alerts flow through n8n into Supabase, get scored by DeepSeek, and surface in a decision-first Next.js dashboard — score, recommendation, matched evidence, and editable proposal drafts. Jobs you spot while browsing can be added manually by pasting their Upwork URL (details auto-fill when possible). Nothing is ever auto-applied to Upwork.
+A personal opportunity-intelligence dashboard for Upwork + company career boards. Gmail saved-search alerts and ATS board polls flow through n8n into Supabase, get scored by DeepSeek, and surface in a decision-first Next.js dashboard — score, recommendation, matched evidence, and editable proposal drafts. Jobs you spot while browsing can be added manually by pasting their Upwork URL (details auto-fill when possible). Nothing is ever auto-applied.
 
-Pipeline: `Gmail → n8n → Supabase (Postgres) → Next.js dashboard`.
+Pipeline: `Gmail / ATS boards → n8n → Supabase (Postgres) → Next.js dashboard`.
 
 ## Stack
 
@@ -42,19 +42,27 @@ Run in the Supabase SQL Editor, in order:
 3. `supabase/01_rls_policies.sql` — RLS: `authenticated` full access, `anon` denied
 4. `supabase/02_views.sql` — `job_feed` read-model view
 5. `supabase/03_seed.sql` — Dee's profile (+ commented portfolio example)
+6. `supabase/04_portfolio_links.sql` — portfolio link columns
+7. `supabase/05_personas.sql` — multi-persona profiles (label, pillar, is_default)
+8. `supabase/06_ats_sources.sql` — `watched_companies` table, ATS columns on `jobs`
+9. `supabase/07_seed_watchlist.sql` — seed ~14 companies across 4 pillars
 
 **Auth:** enable Email provider in Supabase → Authentication → Providers (magic-link OTP). RLS policy file must run before first login.
 
 ## n8n
 
-Import the three workflows in [`n8n/workflows/`](./n8n/workflows/) and follow [`n8n/README.md`](./n8n/README.md). Summary:
+Import the four workflows in [`n8n/workflows/`](./n8n/workflows/) and follow [`n8n/README.md`](./n8n/README.md). Summary:
 
-1. Import `01_intake.json`, `02_scoring.json`, `04_daily_digest.json`.
+1. Import `01_intake.json`, `02_scoring.json`, `04_daily_digest.json`, `05_ats_intake.json`.
 2. Connect Gmail OAuth2 credentials; set env vars `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEEPSEEK_API_KEY`, `RADAR_EMAIL`.
-3. Re-select the referenced sub-workflow in the **Run Scoring** node.
+3. Re-select the referenced sub-workflow in the **Run Scoring** nodes (in both `01_intake.json` and `05_ats_intake.json`).
 4. Adjust the **Parse Email** regexes to match your alert email layout; tune the digest cron.
 
 Proposals are generated **on demand only** — use the "Generate proposal" button on a job's page (calls DeepSeek server-side). n8n only ingests, scores, and notifies (daily digest + instant ≥ 9.0 alerts); it never drafts or submits proposals automatically.
+
+### ATS Radar
+
+The `05_ats_intake.json` workflow polls ~14 company career boards (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee) every 6 hours. Companies are managed from Settings → Watched Companies. New jobs matching your 4-pillar keywords are auto-imported and scored. Paste any careers URL — the system auto-detects the ATS platform.
 
 ## Commands
 

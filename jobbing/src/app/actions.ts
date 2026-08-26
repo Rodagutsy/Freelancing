@@ -26,6 +26,11 @@ import {
   setDefaultProfile,
   upsertProfile,
 } from "@/lib/services/settings";
+import {
+  addWatchedCompany,
+  deleteWatchedCompany,
+  toggleWatchedCompany,
+} from "@/lib/services/watchedCompanies";
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -581,6 +586,71 @@ export async function fetchPortfolioFromUrl(
     }
 
     return { ok: true, data: { ...preview, storedImageUrl } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Watched companies (ATS radar)                                       */
+/* ------------------------------------------------------------------ */
+
+export async function addWatchedCompanyAction(input: {
+  name: string;
+  url: string;
+  region?: "us" | "eu";
+}): Promise<ActionResult> {
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await addWatchedCompany(supabase, {
+      name: input.name,
+      careersUrl: input.url,
+      region: input.region,
+    });
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function toggleWatchedCompanyAction(
+  companyId: string,
+  active: boolean,
+): Promise<ActionResult> {
+  const parsedId = uuidSchema.safeParse(companyId);
+  if (!parsedId.success) return { ok: false, error: "Invalid company id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await toggleWatchedCompany(supabase, parsedId.data, active);
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteWatchedCompanyAction(
+  companyId: string,
+): Promise<ActionResult> {
+  const parsedId = uuidSchema.safeParse(companyId);
+  if (!parsedId.success) return { ok: false, error: "Invalid company id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await deleteWatchedCompany(supabase, parsedId.data);
+    revalidatePath("/settings");
+    return { ok: true };
   } catch (error) {
     return fail(error);
   }

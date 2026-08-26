@@ -35,6 +35,23 @@
   color: var(--warning);
 }
 
+.personaRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.personaRow select {
+  max-width: 260px;
+}
+
+.personaLabel {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
 .textarea {
   width: 100%;
   min-height: 260px;

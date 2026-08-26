@@ -48,14 +48,14 @@ export interface PortfolioProjectRow {
 
 export interface JobRow {
   id: string;
-  source: "upwork_email" | "upwork_api";
+  source: "upwork_email" | "upwork_api" | "ats_api";
   raw_payload: unknown;
   title: string;
   description: string;
   skills_requested: string[];
   budget_min: number | null;
   budget_max: number | null;
-  budget_type: "fixed" | "hourly" | null;
+  budget_type: "fixed" | "hourly" | "salary" | null;
   client_rating: number | null;
   client_reviews_count: number | null;
   client_jobs_posted: number | null;
@@ -66,6 +66,9 @@ export interface JobRow {
   ingested_at: string;
   skipped_at: string | null;
   skip_reason: string | null;
+  company_name: string | null;
+  location: string | null;
+  is_remote: boolean | null;
 }
 
 export interface ScoreFactor {
@@ -112,6 +115,28 @@ export interface ManualReviewQueueRow {
   raw_email: unknown;
   status: "pending" | "resolved" | "skipped";
   created_at: string;
+}
+
+export type WatchedCompanyPlatform =
+  | "greenhouse"
+  | "lever"
+  | "ashby"
+  | "workable"
+  | "smartrecruiters"
+  | "personio"
+  | "recruitee"
+  | "unknown";
+
+export interface WatchedCompanyRow {
+  id: string;
+  name: string;
+  platform: WatchedCompanyPlatform;
+  board_token: string | null;
+  careers_url: string;
+  region: "us" | "eu";
+  active: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 /** Joined view: job + latest score + latest proposal. */

@@ -12,7 +12,7 @@ Scoring rubric — factors and weights:
 - skill_match (20%): overlap between requested skills and the freelancer's stated skills
 - experience (15%): relevant experience suggested by the profile and portfolio
 - client_quality (10%): rating, reviews, hire rate, jobs posted (unknown data must not be assumed good)
-- budget_fit (10%): posted budget vs the freelancer's target rate range
+- budget_fit (10%): posted budget or salary vs the freelancer's target rate range. For salaried roles, compare annual salary to equivalent hourly rate.
 - requirements_fit (10%): how realistic the job requirements are
 - competition (5%): proposal count — high competition lowers the score
 - red_flags (5%): anything suspicious or a strong mismatch lowers the score
@@ -54,6 +54,10 @@ function formatBudget(job: JobRow): string {
   if (job.budget_type === "hourly") {
     if (job.budget_min === null && job.budget_max === null) return "not given";
     return `$${job.budget_min ?? "?"}–$${job.budget_max ?? "?"}/hr`;
+  }
+  if (job.budget_type === "salary") {
+    if (job.budget_min === null && job.budget_max === null) return "not given";
+    return `$${job.budget_min ?? "?"}–$${job.budget_max ?? "?"}/yr (salary)`;
   }
   if (job.budget_min === null && job.budget_max === null) return "not given";
   return `$${job.budget_min ?? "?"}–$${job.budget_max ?? "?"} (fixed)`;

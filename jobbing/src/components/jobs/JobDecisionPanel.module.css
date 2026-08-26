@@ -18,6 +18,34 @@
   gap: var(--space-3);
 }
 
+.rescoreRow {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+}
+
+.rescoreLabel {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.rescoreControls {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
+}
+
+.rescoreControls select {
+  flex: 1;
+  min-width: 0;
+}
+
 .primary {
   display: inline-flex;
   align-items: center;

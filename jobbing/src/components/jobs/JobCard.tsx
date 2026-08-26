@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowRight, Clock, Star, Users, Wallet } from "lucide-react";
+import { ArrowRight, Clock, Globe, MapPin, Star, Users, Wallet } from "lucide-react";
 import { formatCurrencyRange, formatRelative, truncate } from "@/lib/utils";
 import type { JobFeedRow } from "@/lib/types";
 import { RecommendationBadge } from "@/components/jobs/RecommendationBadge";
@@ -8,6 +8,12 @@ import { ConfidenceIndicator } from "@/components/jobs/ConfidenceIndicator";
 import { MetadataRow } from "@/components/jobs/MetadataRow";
 import { SkillTag } from "@/components/common/SkillTag";
 import styles from "./JobCard.module.css";
+
+const SOURCE_LABELS: Record<string, string> = {
+  upwork_email: "Upwork",
+  upwork_api: "Upwork",
+  ats_api: "ATS",
+};
 
 function confidenceNote(job: JobFeedRow): string | null {
   const gaps: string[] = [];
@@ -28,6 +34,23 @@ export function JobCard({ job }: { job: JobFeedRow }) {
         <RecommendationBadge recommendation={job.recommendation} />
         <JobScore score={job.score_total} size="sm" />
       </div>
+
+      {(job.source === "ats_api" || job.company_name) && (
+        <div className={styles.sourceLine}>
+          <span className={styles.sourceBadge}>
+            <Globe size={12} aria-hidden />
+            {job.source === "ats_api" ? "ATS" : SOURCE_LABELS[job.source] ?? job.source}
+            {job.company_name && ` · ${job.company_name}`}
+          </span>
+          {job.location && (
+            <span className={styles.locationBadge}>
+              <MapPin size={12} aria-hidden />
+              {job.location}
+              {job.is_remote && " · Remote"}
+            </span>
+          )}
+        </div>
+      )}
 
       <h3 className={styles.title}>
         <Link href={`/jobs/${job.id}`} className={styles.titleLink}>

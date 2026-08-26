@@ -8,7 +8,13 @@ import { PROPOSAL_INSTRUCTIONS } from "@/lib/constants";
 import { generateProposalAction } from "@/app/actions";
 import { useToast } from "@/components/common/Toast";
 import { Button } from "@/components/common/Button";
+import fieldStyles from "@/components/common/fields.module.css";
 import styles from "./ProposalEditor.module.css";
+
+interface PersonaOption {
+  id: string;
+  label: string;
+}
 
 interface ProposalEditorProps {
   jobId: string;
@@ -18,6 +24,8 @@ interface ProposalEditorProps {
     version: number;
   } | null;
   canGenerate: boolean;
+  profiles?: PersonaOption[];
+  defaultPersonaId?: string | null;
 }
 
 function wordCount(text: string): number {
@@ -29,6 +37,8 @@ export function ProposalEditor({
   jobId,
   proposal,
   canGenerate,
+  profiles = [],
+  defaultPersonaId = null,
 }: ProposalEditorProps) {
   const router = useRouter();
   const { toast } = useToast();
@@ -37,6 +47,7 @@ export function ProposalEditor({
   const [angle, setAngle] = useState(proposal?.angle ?? "");
   const [version, setVersion] = useState(proposal?.version ?? 0);
   const [pending, setPending] = useState(false);
+  const [personaId, setPersonaId] = useState(defaultPersonaId ?? "");
 
   const count = wordCount(text);
   const inRange = count >= 150 && count <= 250;
@@ -46,7 +57,7 @@ export function ProposalEditor({
     if (pending) return;
     setPending(true);
     try {
-      const result = await generateProposalAction(jobId, instruction);
+      const result = await generateProposalAction(jobId, instruction, personaId || undefined);
       if (!result.ok) {
         toast(result.error ?? "Proposal could not be generated.", "error");
         return;
@@ -91,6 +102,27 @@ export function ProposalEditor({
           {count} words{inRange ? "" : " (target 150–250)"}
         </span>
       </div>
+
+      {profiles.length > 0 && (
+        <div className={styles.personaRow}>
+          <label className={styles.personaLabel} htmlFor="proposal-persona">
+            Draft with persona
+          </label>
+          <select
+            id="proposal-persona"
+            className={fieldStyles.input}
+            value={personaId}
+            onChange={(event) => setPersonaId(event.target.value)}
+            disabled={pending}
+          >
+            {profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <textarea
         className={styles.textarea}

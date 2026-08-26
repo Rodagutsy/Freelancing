@@ -13,6 +13,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getJobDetail, matchPortfolioProjects } from "@/lib/services/jobs";
 import { getApplicationForJob } from "@/lib/services/applications";
 import { listPortfolioProjects } from "@/lib/services/portfolio";
+import { getDefaultProfile, getProfiles } from "@/lib/services/settings";
 import { formatCurrencyRange, formatPosted } from "@/lib/utils";
 import { JobDecisionPanel } from "@/components/jobs/JobDecisionPanel";
 import { ScoreBreakdown } from "@/components/jobs/ScoreBreakdown";
@@ -62,10 +63,20 @@ export default async function JobDetailPage({
   const feed = await getJobDetail(supabase, id);
   if (!feed) notFound();
 
-  const [application, projects] = await Promise.all([
+  const [application, projects, profiles, defaultProfile] = await Promise.all([
     getApplicationForJob(supabase, id),
     listPortfolioProjects(supabase),
+    getProfiles(supabase),
+    getDefaultProfile(supabase),
   ]);
+
+  const personaOptions = profiles.map((p) => ({ id: p.id, label: p.label }));
+  const scoredBy =
+    feed.score_profile_id != null
+      ? (profiles.find((p) => p.id === feed.score_profile_id)?.label ?? null)
+      : null;
+  // Proposal drafts default to the persona that scored the job, else the default.
+  const draftPersonaId = feed.score_profile_id ?? defaultProfile?.id ?? null;
 
   const usedIds = feed.proposal_used_projects ?? [];
   let citedProjects = projects.filter((p) => usedIds.includes(p.id));
@@ -126,6 +137,8 @@ export default async function JobDetailPage({
             skippedAt={feed.skipped_at}
             skipReason={feed.skip_reason}
             confidenceNote={confidenceNote(feed)}
+            profiles={personaOptions}
+            scoredByLabel={scoredBy}
           />
         </aside>
 
@@ -231,6 +244,8 @@ export default async function JobDetailPage({
                   : null
               }
               canGenerate={canGenerate}
+              profiles={personaOptions}
+              defaultPersonaId={draftPersonaId}
             />
           </section>
 

@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Copy, ExternalLink, X } from "lucide-react";
+import { Check, Copy, ExternalLink, RefreshCw, X } from "lucide-react";
 import {
   markJobApplied,
   markJobSkipped,
+  rescoreJobAction,
   updateApplicationForJob,
 } from "@/app/actions";
 import type {
@@ -19,6 +20,7 @@ import { RecommendationBadge } from "@/components/jobs/RecommendationBadge";
 import { ConfidenceIndicator } from "@/components/jobs/ConfidenceIndicator";
 import { ApplicationStatusSelect } from "@/components/applications/ApplicationStatusSelect";
 import { useToast } from "@/components/common/Toast";
+import fieldStyles from "@/components/common/fields.module.css";
 import styles from "./JobDecisionPanel.module.css";
 
 const SKIP_REASON_CHOICES = [
@@ -28,6 +30,11 @@ const SKIP_REASON_CHOICES = [
   "Too much competition",
   "Other",
 ];
+
+interface PersonaOption {
+  id: string;
+  label: string;
+}
 
 interface JobDecisionPanelProps {
   jobId: string;
@@ -40,6 +47,8 @@ interface JobDecisionPanelProps {
   skippedAt: string | null;
   skipReason: string | null;
   confidenceNote?: string | null;
+  profiles?: PersonaOption[];
+  scoredByLabel?: string | null;
 }
 
 export function JobDecisionPanel({
@@ -53,12 +62,32 @@ export function JobDecisionPanel({
   skippedAt,
   skipReason,
   confidenceNote,
+  profiles = [],
+  scoredByLabel = null,
 }: JobDecisionPanelProps) {
   const router = useRouter();
   const { toast } = useToast();
 
   const [skipOpen, setSkipOpen] = useState(false);
   const [pending, setPending] = useState(false);
+  const [rescorePersonaId, setRescorePersonaId] = useState("");
+  const [rescoring, setRescoring] = useState(false);
+
+  async function rescore() {
+    if (rescoring) return;
+    setRescoring(true);
+    const result = await rescoreJobAction(jobId, rescorePersonaId || undefined);
+    setRescoring(false);
+    if (result.ok && result.data) {
+      toast(
+        `Re-scored: ${result.data.scoreTotal.toFixed(1)} — ${result.data.recommendation}`,
+        "success",
+      );
+      router.refresh();
+    } else {
+      toast(result.error ?? "Could not re-score this job.", "error");
+    }
+  }
 
   async function apply() {
     setPending(true);
@@ -115,6 +144,41 @@ export function JobDecisionPanel({
       </div>
 
       <ConfidenceIndicator confidence={confidence} note={confidenceNote} />
+
+      {profiles.length > 0 && (
+        <div className={styles.rescoreRow}>
+          <label className={styles.rescoreLabel} htmlFor="rescore-persona">
+            {scoredByLabel
+              ? `Scored by ${scoredByLabel}. Re-score with persona`
+              : "Re-score with persona"}
+          </label>
+          <div className={styles.rescoreControls}>
+            <select
+              id="rescore-persona"
+              className={fieldStyles.input}
+              value={rescorePersonaId}
+              onChange={(event) => setRescorePersonaId(event.target.value)}
+              disabled={rescoring}
+            >
+              <option value="">Default persona</option>
+              {profiles.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.label}
+                </option>
+              ))}
+            </select>
+            <Button
+              variant="secondary"
+              size="sm"
+              loading={rescoring}
+              onClick={() => void rescore()}
+            >
+              {!rescoring && <RefreshCw className={styles.actionIcon} aria-hidden />}
+              Re-score
+            </Button>
+          </div>
+        </div>
+      )}
 
       <div className={styles.actions}>
         <a

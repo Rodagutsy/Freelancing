@@ -27,6 +27,36 @@
   color: var(--text-primary);
 }
 
+.sourceLine {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.sourceBadge,
+.locationBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  font-weight: 600;
+}
+
+.sourceBadge {
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  color: var(--gold-400);
+}
+
+.locationBadge {
+  background: transparent;
+  color: var(--text-muted);
+}
+
 .titleLink:hover {
   color: var(--gold-400);
 }

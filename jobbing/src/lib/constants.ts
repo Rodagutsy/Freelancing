@@ -1,4 +1,27 @@
 import type { ApplicationOutcome, Recommendation } from "@/lib/types/database";
+import type { PersonaPillar } from "@/lib/types";
+
+export const PILLAR_META: Record<PersonaPillar, { label: string; tone: "info" | "success" | "warning" | "muted" }> = {
+  design: { label: "Design", tone: "info" },
+  build: { label: "Build", tone: "success" },
+  automation: { label: "Automation", tone: "warning" },
+  growth: { label: "Growth", tone: "muted" },
+};
+
+/** Broad keyword net for the ATS radar intake — any match keeps the job. */
+export const ATS_KEYWORDS: ReadonlyArray<string> = [
+  // design
+  "design", "ux", "ui ", "figma", "product designer", "web design",
+  // build
+  "developer", "engineer", "full-stack", "fullstack", "frontend", "front-end",
+  "backend", "back-end", "ai", "llm", "gpt", "machine learning",
+  // automation
+  "automation", "workflow", "integration", "n8n", "zapier", "make.com",
+  "api", "crm",
+  // growth
+  "growth", "marketing", "seo", "ads", "paid media", "lifecycle",
+  "email marketing", "performance marketing",
+];
 
 export const NAV_ITEMS = [
   { href: "/dashboard", label: "Dashboard" },

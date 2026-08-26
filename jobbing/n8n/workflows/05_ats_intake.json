@@ -1,0 +1,207 @@
+{
+  "name": "05 - ATS Intake (company boards -> jobs)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "a0001111-2222-3333-4444-555566667777",
+      "name": "Every 6 Hours",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/watched_companies?select=*&active=eq.true",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a0002222-3333-4444-5555-666677778888",
+      "name": "Load Watched Companies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const companies = $input.first().json;\nconst list = Array.isArray(companies) ? companies : (companies ? [companies] : []);\nif (list.length === 0) return [];\n\nreturn list.map(c => ({ json: c }));"
+      },
+      "id": "a0003333-4444-5555-6666-777788889999",
+      "name": "Split Companies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [560, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const company = $input.first().json;\nconst platform = (company.platform || 'unknown').toLowerCase();\nconst url = company.careers_url;\nconst name = company.name;\n\nlet jobs = [];\n\n// Greenhouse board API\nif (platform === 'greenhouse') {\n  const token = company.board_token || '';\n  const boardSlug = url.match(/boards\\.greenhouse\\.io\\/([\\w.-]+)/)?.[1] || '';\n  if (!boardSlug) return [];\n  const apiUrl = `https://boards-api.greenhouse.io/v1/boards/${boardSlug}/jobs?content=true`;\n  try {\n    const resp = await fetch(apiUrl);\n    if (!resp.ok) return [];\n    const data = await resp.json();\n    jobs = (data.jobs || []).map(j => ({\n      title: j.title || '',\n      description: (j.content || '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 5000),\n      url: j.absolute_url || `https://boards.greenhouse.io/${boardSlug}/jobs/${j.id}`,\n      location: (j.location && j.location.name) || '',\n      skills: (j.departments || []).map(d => d.name).filter(Boolean),\n      posted_at: j.updated_at || j.created_at || new Date().toISOString(),\n    }));\n  } catch { return []; }\n}\n\n// Lever job board API\nelse if (platform === 'lever') {\n  const leverHost = new URL(url).hostname;\n  const teamSlug = leverHost.replace('jobs.lever.co/', '');\n  const apiUrl = `https://api.lever.co/v0/postings/${teamSlug}?mode=json`;\n  try {\n    const resp = await fetch(apiUrl);\n    if (!resp.ok) return [];\n    const data = await resp.json();\n    jobs = (Array.isArray(data) ? data : []).map(j => ({\n      title: j.text || '',\n      description: (j.descriptionPlain || j.description || '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 5000),\n      url: j.hostedUrl || url,\n      location: (j.categories && j.categories.location) || '',\n      skills: (j.tags || []),\n      posted_at: j.createdAt ? new Date(j.createdAt).toISOString() : new Date().toISOString(),\n    }));\n  } catch { return []; }\n}\n\n// Ashby API\nelse if (platform === 'ashby') {\n  const orgSlug = url.match(/ashbyhq\\.com\\/([\\w.-]+)/)?.[1] || '';\n  if (!orgSlug) return [];\n  const apiUrl = `https://api.ashbyhq.com/posting-api/job-board/${orgSlug}`;\n  try {\n    const resp = await fetch(apiUrl);\n    if (!resp.ok) return [];\n    const data = await resp.json();\n    jobs = (data.jobs || []).map(j => ({\n      title: j.title || '',\n      description: (j.descriptionPlain || j.description || '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 5000),\n      url: j.url || url,\n      location: (j.locationName || ''),\n      skills: (j.teamName ? [j.teamName] : []),\n      posted_at: j.publishedAt || new Date().toISOString(),\n    }));\n  } catch { return []; }\n}\n\n// Workable\nelse if (platform === 'workable') {\n  const subdomain = url.match(/([\\w-]+)\\.workable\\.com/)?.[1] || '';\n  if (!subdomain) return [];\n  const apiUrl = `https://${subdomain}.workable.com/spider/v1/api/accounts/${subdomain}/jobs`;\n  try {\n    const resp = await fetch(apiUrl);\n    if (!resp.ok) return [];\n    const data = await resp.json();\n    jobs = (data.jobs || []).map(j => ({\n      title: j.title || '',\n      description: (j.description || '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 5000),\n      url: j.url || url,\n      location: (j.region || j.city || ''),\n      skills: (j.tags || []),\n      posted_at: j.published_at || new Date().toISOString(),\n    }));\n  } catch { return []; }\n}\n\n// SmartRecruiters\nelse if (platform === 'smartrecruiters') {\n  const apiUrl = `https://api.smartrecruiters.com/v1/companies/${encodeURIComponent(name)}/postings?limit=100`;\n  try {\n    const resp = await fetch(apiUrl);\n    if (!resp.ok) return [];\n    const data = await resp.json();\n    jobs = (data.content || []).map(j => ({\n      title: j.name || '',\n      description: (j.jobAd && j.jobAd.sections && j.jobAd.sections.generalDescription || '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 5000),\n      url: j.ref || j.applyUrl || url,\n      location: (j.location && j.location.city) || '',\n      skills: (j.jobAd && j.jobAd.sections && j.jobAd.sections.employmentExperience || '').split(',').map(s => s.trim()).filter(Boolean),\n      posted_at: j.releasedDate || new Date().toISOString(),\n    }));\n  } catch { return []; }\n}\n\n// Personio (public API not available — skip gracefully)\nelse if (platform === 'personio') {\n  return [];\n}\n\n// Recruitee\nelse if (platform === 'recruitee') {\n  const apiUrl = `https://api.recruitee.com/v1/careers/${company.board_token || name.toLowerCase().replace(/\\s+/g, '')}/jobs`;\n  try {\n    const resp = await fetch(apiUrl);\n    if (!resp.ok) return [];\n    const data = await resp.json();\n    jobs = (data.jobs || []).map(j => ({\n      title: j.title || '',\n      description: (j.description || '').replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim().slice(0, 5000),\n      url: j.url || url,\n      location: (j.location || ''),\n      skills: [],\n      posted_at: j.created_at || new Date().toISOString(),\n    }));\n  } catch { return []; }\n}\n\n// Unknown platform — skip\nelse {\n  return [];\n}\n\n// Enrich each job with company metadata\nreturn jobs.map(j => ({ json: { ...j, company_name: name, careers_url: url } }));"
+      },
+      "id": "a0004444-5555-6666-7777-888899990000",
+      "name": "Fetch Jobs from ATS",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Broad 4-pillar keyword any-match filter.\nconst job = $input.first().json;\nconst text = ((job.title || '') + ' ' + (job.description || '') + ' ' + (job.skills || []).join(' ')).toLowerCase();\n\nconst KEYWORDS = [\n  // design\n  'design', 'ux', 'ui', 'figma', 'product designer', 'web design',\n  // build\n  'developer', 'engineer', 'full-stack', 'fullstack', 'frontend', 'front-end',\n  'backend', 'back-end', 'ai', 'llm', 'gpt', 'machine learning',\n  // automation\n  'automation', 'workflow', 'integration', 'n8n', 'zapier', 'make.com', 'api', 'crm',\n  // growth\n  'growth', 'marketing', 'seo', 'ads', 'paid media', 'lifecycle',\n  'email marketing', 'performance marketing',\n];\n\nconst matched = KEYWORDS.some(kw => text.includes(kw));\nif (!matched) return [];\n\nreturn [{ json: job }];"
+      },
+      "id": "a0005555-6666-7777-8888-999900001111",
+      "name": "Keyword Filter",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Normalize an ATS job into the jobs table schema.\nconst input = $input.first().json;\n\nconst isRemote = (input.location || '').toLowerCase().includes('remote')\n  || (input.description || '').toLowerCase().includes('remote');\n\nreturn {\n  json: {\n    source: 'ats_api',\n    raw_payload: input,\n    title: input.title || 'Untitled',\n    description: input.description || '',\n    skills_requested: Array.isArray(input.skills) ? input.skills : [],\n    budget_min: null,\n    budget_max: null,\n    budget_type: 'salary',\n    client_rating: null,\n    client_reviews_count: null,\n    client_jobs_posted: null,\n    client_hire_rate: null,\n    proposals_count: null,\n    posted_at: input.posted_at || new Date().toISOString(),\n    url: input.url || '',\n    ingested_at: new Date().toISOString(),\n    company_name: input.company_name || null,\n    location: input.location || null,\n    is_remote: isRemote,\n  }\n};"
+      },
+      "id": "a0006666-7777-8888-9999-000011112222",
+      "name": "Normalize Job",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1400, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/jobs",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "resolution=merge-duplicates,return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json)}}",
+        "options": {}
+      },
+      "id": "a0007777-8888-9999-0000-111122223333",
+      "name": "Upsert Job",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 0],
+      "notes": "Upsert keyed on unique jobs.url. Existing jobs are skipped (ignore-duplicates)."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "a0008888-9999-0000-1111-222233334444",
+              "leftValue": "={{$json.id}}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isNotEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a0009999-0000-1111-2222-333344445555",
+      "name": "Is New Job?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1960, 0],
+      "notes": "PostgREST returns the inserted row when new, or an empty/error response when ignored by upsert."
+    },
+    {
+      "parameters": {
+        "workflowId": "02 - Scoring (jobs -> job_scores)",
+        "options": {
+          "passInputData": true
+        }
+      },
+      "id": "a0010000-1111-2222-3333-444455556666",
+      "name": "Run Scoring",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 2.3,
+      "position": [2240, 0],
+      "notes": "AFTER IMPORT: open this node and select the '02 - Scoring' workflow in the dropdown, then save."
+    }
+  ],
+  "connections": {
+    "Every 6 Hours": {
+      "main": [[{ "node": "Load Watched Companies", "type": "main", "index": 0 }]]
+    },
+    "Load Watched Companies": {
+      "main": [[{ "node": "Split Companies", "type": "main", "index": 0 }]]
+    },
+    "Split Companies": {
+      "main": [[{ "node": "Fetch Jobs from ATS", "type": "main", "index": 0 }]]
+    },
+    "Fetch Jobs from ATS": {
+      "main": [[{ "node": "Keyword Filter", "type": "main", "index": 0 }]]
+    },
+    "Keyword Filter": {
+      "main": [[{ "node": "Normalize Job", "type": "main", "index": 0 }]]
+    },
+    "Normalize Job": {
+      "main": [[{ "node": "Upsert Job", "type": "main", "index": 0 }]]
+    },
+    "Upsert Job": {
+      "main": [[{ "node": "Is New Job?", "type": "main", "index": 0 }]]
+    },
+    "Is New Job?": {
+      "main": [
+        [{ "node": "Run Scoring", "type": "main", "index": 0 }],
+        []
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

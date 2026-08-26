@@ -6,7 +6,7 @@ import {
   getDashboardStats,
   listJobs,
 } from "@/lib/services/jobs";
-import { getProfile } from "@/lib/services/settings";
+import { getDefaultProfile } from "@/lib/services/settings";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/common/Button";
 import { JobCard } from "@/components/jobs/JobCard";
@@ -22,7 +22,7 @@ export default async function DashboardPage() {
     getDashboardStats(supabase),
     listJobs(supabase, { status: "apply", limit: 6 }),
     listJobs(supabase, { status: "review", limit: 6 }),
-    getProfile(supabase),
+    getDefaultProfile(supabase),
   ]);
 
   const now = new Date();

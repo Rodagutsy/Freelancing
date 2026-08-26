@@ -1,9 +1,10 @@
 # n8n Workflows — Upwork Radar
 
-Three importable workflow templates. They implement the pipeline:
+Four importable workflow templates. They implement the pipeline:
 
 ```
 Gmail alert → 01 Intake → 02 Scoring → (>=9) → instant Gmail alert
+ATS boards → 05 ATS Intake → 02 Scoring → (>=9) → instant Gmail alert
   04 Daily Digest (scheduled, 08:00)
 ```
 
@@ -16,8 +17,9 @@ from the Next.js server). This keeps AI costs tied to your actions.
 | File | Purpose | Trigger |
 |---|---|---|
 | `01_intake.json` | Parse Upwork alert email, upsert into `jobs`, hand off to scoring | Gmail trigger (poll) |
-| `02_scoring.json` | Load profile + portfolio, DeepSeek score, insert `job_scores`, instant alert on >= 9.0 | Called by 01 |
+| `02_scoring.json` | Load default profile + portfolio, DeepSeek score, insert `job_scores`, instant alert on >= 9.0 | Called by 01 and 05 |
 | `04_daily_digest.json` | Daily email of jobs scored >= 7 in the last 24h | Cron `0 8 * * *` |
+| `05_ats_intake.json` | Poll watched company ATS boards, filter by 4-pillar keywords, upsert jobs, hand off to scoring | Cron every 6 hours |
 
 ## Import
 
@@ -25,10 +27,29 @@ from the Next.js server). This keeps AI costs tied to your actions.
 2. **Credentials** (create + attach):
    - **Gmail OAuth2** (Google Cloud project, Gmail API enabled) → attach to the *Gmail Trigger*, *Instant Alert (Gmail)*, and *Send Digest (Gmail)* nodes.
    - No credential needed for the HTTP Request nodes — they read env vars.
-3. **Re-link the sub-workflow** (required after import, IDs change):
+3. **Re-link the sub-workflows** (required after import, IDs change):
    - In `01_intake.json` → node **Run Scoring**: select the `02 - Scoring` workflow.
+   - In `05_ats_intake.json` → node **Run Scoring**: select the `02 - Scoring` workflow.
    - The child workflow starts with an *Execute Workflow Trigger* node — keep that node first.
 4. Turn each workflow **Active** when ready to run.
+
+## ATS Intake (05_ats_intake.json)
+
+The ATS workflow polls your watched company list (managed from the dashboard's
+Settings page) every **6 hours**. It supports Greenhouse, Lever, Ashby,
+Workable, SmartRecruiters, and Recruitee public APIs. Personio is listed but
+has no public API — those entries are skipped.
+
+Latency note: new jobs appear within ~6 hours of being posted on the company's
+careers page. This is intentional — ATS boards are low-churn compared to Upwork,
+so 6-hour polling keeps the signal fresh without excessive traffic.
+
+The workflow:
+1. Loads active companies from `watched_companies`
+2. Fetches jobs from each company's ATS API
+3. Filters by broad 4-pillar keyword match (design / build / automation / growth)
+4. Upserts into `jobs` (source = `ats_api`, deduped on URL)
+5. Only new (non-duplicate) jobs are handed to the scoring sub-workflow
 
 ## Environment variables (n8n instance)
 
