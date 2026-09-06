@@ -1,29 +1,40 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
-import { MailCheck } from "lucide-react";
-import { signInWithEmail } from "@/app/actions";
+import { signInWithEmail, signUpWithEmail } from "@/app/actions";
 import { Button } from "@/components/common/Button";
 import { FormField } from "@/components/common/FormField";
 import fieldStyles from "@/components/common/fields.module.css";
 import styles from "./page.module.css";
 
 export default function LoginPage() {
+  const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setPending(true);
     setError(null);
-    const result = await signInWithEmail(email);
+    setSuccess(null);
+
+    const result =
+      mode === "signin"
+        ? await signInWithEmail(email, password)
+        : await signUpWithEmail(email, password);
+
     setPending(false);
     if (result.ok) {
-      setSent(true);
+      if (mode === "signup") {
+        setSuccess("Account created! Check your email to confirm, then sign in.");
+        setMode("signin");
+        setPassword("");
+      }
     } else {
-      setError(result.error ?? "Could not send the magic link.");
+      setError(result.error ?? "Something went wrong.");
     }
   }
 
@@ -35,49 +46,100 @@ export default function LoginPage() {
           <span>Upwork Radar</span>
         </div>
 
-        {sent ? (
-          <div className={styles.sent}>
-            <MailCheck className={styles.sentIcon} aria-hidden />
-            <h1 className={styles.heading}>Check your email</h1>
-            <p className={styles.bodyText}>
-              We sent a magic link to <strong>{email}</strong>. Open it to sign
-              in — it works once and expires quickly.
-            </p>
-          </div>
-        ) : (
-          <>
-            <h1 className={styles.heading}>Sign in</h1>
-            <p className={styles.bodyText}>
-              Enter the email address linked to your workspace to receive a
-              one-time sign-in link.
-            </p>
+        <h1 className={styles.heading}>
+          {mode === "signin" ? "Sign in" : "Create account"}
+        </h1>
+        <p className={styles.bodyText}>
+          {mode === "signin"
+            ? "Enter your email and password to sign in."
+            : "Enter your email and choose a password to get started."}
+        </p>
 
-            <form className={styles.form} onSubmit={handleSubmit} noValidate>
-              <FormField
-                label="Email"
-                htmlFor="email"
-                error={error ?? undefined}
-                required
+        {success && <p className={styles.success}>{success}</p>}
+
+        <form className={styles.form} onSubmit={handleSubmit} noValidate>
+          <FormField
+            label="Email"
+            htmlFor="email"
+            error={error ?? undefined}
+            required
+          >
+            <input
+              id="email"
+              type="email"
+              name="email"
+              autoComplete="email"
+              className={`${fieldStyles.input} ${error ? fieldStyles.hasError : ""}`}
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              placeholder="you@example.com"
+              required
+            />
+          </FormField>
+
+          <FormField
+            label="Password"
+            htmlFor="password"
+            required
+          >
+            <input
+              id="password"
+              type="password"
+              name="password"
+              autoComplete={mode === "signin" ? "current-password" : "new-password"}
+              className={fieldStyles.input}
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder={mode === "signup" ? "At least 6 characters" : "Your password"}
+              required
+              minLength={6}
+            />
+          </FormField>
+
+          <Button type="submit" loading={pending} className={styles.submit}>
+            {pending
+              ? mode === "signin"
+                ? "Signing in…"
+                : "Creating account…"
+              : mode === "signin"
+                ? "Sign in"
+                : "Create account"}
+          </Button>
+        </form>
+
+        <p className={styles.toggle}>
+          {mode === "signin" ? (
+            <>
+              Don&apos;t have an account?{" "}
+              <button
+                type="button"
+                className={styles.toggleButton}
+                onClick={() => {
+                  setMode("signup");
+                  setError(null);
+                  setSuccess(null);
+                }}
               >
-                <input
-                  id="email"
-                  type="email"
-                  name="email"
-                  autoComplete="email"
-                  className={`${fieldStyles.input} ${error ? fieldStyles.hasError : ""}`}
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="you@example.com"
-                  required
-                />
-              </FormField>
-
-              <Button type="submit" loading={pending} className={styles.submit}>
-                {pending ? "Sending link…" : "Send magic link"}
-              </Button>
-            </form>
-          </>
-        )}
+                Create one
+              </button>
+            </>
+          ) : (
+            <>
+              Already have an account?{" "}
+              <button
+                type="button"
+                className={styles.toggleButton}
+                onClick={() => {
+                  setMode("signin");
+                  setError(null);
+                  setSuccess(null);
+                }}
+              >
+                Sign in
+              </button>
+            </>
+          )}
+        </p>
       </div>
     </main>
   );

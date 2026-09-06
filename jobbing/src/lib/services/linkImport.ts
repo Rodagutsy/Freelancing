@@ -6,6 +6,7 @@
  */
 
 import type { DatabaseClient } from "@/lib/types";
+import { assertSafeUrl } from "@/lib/schemas/audit";
 
 export type LinkImportKind = "project" | "profile";
 
@@ -79,6 +80,9 @@ function cleanText(value: string): string {
 }
 
 async function fetchPage(url: string): Promise<string> {
+  if (!assertSafeUrl(url)) {
+    throw new Error("This URL is not publicly accessible.");
+  }
   let response: Response;
   try {
     response = await fetch(url, {
@@ -308,6 +312,9 @@ export async function downloadAndStoreImage(
   userId: string,
   imageUrl: string,
 ): Promise<string> {
+  if (!assertSafeUrl(imageUrl)) {
+    throw new Error("Image URL is not publicly accessible.");
+  }
   const response = await fetch(imageUrl, {
     headers: BROWSER_HEADERS,
     cache: "no-store",

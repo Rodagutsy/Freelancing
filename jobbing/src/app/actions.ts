@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
@@ -11,6 +10,8 @@ import { addJobInputSchema } from "@/lib/schemas/job";
 import { portfolioProjectInputSchema } from "@/lib/schemas/portfolio";
 import { personaCreateSchema, profileInputSchema } from "@/lib/schemas/profile";
 import { regenerateInstructionSchema } from "@/lib/schemas/proposal";
+import { auditCreateSchema, pitchGenerateSchema, prospectCreateSchema, prospectUpdateSchema } from "@/lib/schemas/audit";
+import { watchedCompanyCreateSchema } from "@/lib/schemas/common";
 import { uuidSchema } from "@/lib/schemas/common";
 import { getApplicationForJob, createApplication, updateApplication } from "@/lib/services/applications";
 import { importJobPreview, type JobImportPreview } from "@/lib/services/jobImport";
@@ -31,6 +32,19 @@ import {
   deleteWatchedCompany,
   toggleWatchedCompany,
 } from "@/lib/services/watchedCompanies";
+import {
+  createAudit,
+  deleteAudit,
+  getAudit,
+} from "@/lib/services/audits";
+import {
+  createProspect,
+  deleteProspect,
+  linkAuditToProspect,
+  unlinkAuditFromProspect,
+  updateProspect,
+} from "@/lib/services/prospects";
+import { generatePitch } from "@/lib/services/pitchGenerator";
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -48,33 +62,54 @@ function fail(error: unknown): ActionResult<never> {
   return { ok: false, error: message };
 }
 
-async function getAppUrl() {
-  const headersList = await headers();
-  const host = headersList.get("host") ?? "localhost:3000";
-  const proto = headersList.get("x-forwarded-proto") ?? "http";
-  return `${proto}://${host}`;
-}
-
 /* ------------------------------------------------------------------ */
 /* Auth                                                                */
 /* ------------------------------------------------------------------ */
 
 export async function signInWithEmail(
   email: string,
+  password: string,
 ): Promise<ActionResult> {
-  const parsed = z.string().trim().email().safeParse(email);
-  if (!parsed.success) {
+  const parsedEmail = z.string().trim().email().safeParse(email);
+  if (!parsedEmail.success) {
     return { ok: false, error: "Enter a valid email address." };
+  }
+  const parsedPassword = z.string().min(1, "Password is required").safeParse(password);
+  if (!parsedPassword.success) {
+    return { ok: false, error: "Enter your password." };
   }
 
   const supabase = await createClient();
-  const appUrl = await getAppUrl();
 
-  const { error } = await supabase.auth.signInWithOtp({
-    email: parsed.data,
-    options: {
-      emailRedirectTo: `${appUrl}/auth/callback`,
-    },
+  const { error } = await supabase.auth.signInWithPassword({
+    email: parsedEmail.data,
+    password: parsedPassword.data,
+  });
+
+  if (error) {
+    return { ok: false, error: "Invalid email or password." };
+  }
+  return { ok: true };
+}
+
+export async function signUpWithEmail(
+  email: string,
+  password: string,
+): Promise<ActionResult> {
+  const parsedEmail = z.string().trim().email().safeParse(email);
+  if (!parsedEmail.success) {
+    return { ok: false, error: "Enter a valid email address." };
+  }
+  const parsedPassword = z.string().min(6, "Password must be at least 6 characters").safeParse(password);
+  if (!parsedPassword.success) {
+    return { ok: false, error: parsedPassword.error.issues[0].message };
+  }
+
+  const supabase = await createClient();
+
+  const { error } = await supabase.auth.signUp({
+    email: parsedEmail.data,
+    password: parsedPassword.data,
   });
 
   if (error) {
@@ -600,15 +635,18 @@ export async function addWatchedCompanyAction(input: {
   url: string;
   region?: "us" | "eu";
 }): Promise<ActionResult> {
+  const parsed = watchedCompanyCreateSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
   const user = await requireUser();
   if (!user) return { ok: false, error: "You must be signed in." };
 
   try {
     const supabase = await createClient();
     await addWatchedCompany(supabase, {
-      name: input.name,
-      careersUrl: input.url,
-      region: input.region,
+      name: parsed.data.name,
+      careersUrl: parsed.data.url,
+      region: parsed.data.region,
     });
     revalidatePath("/settings");
     return { ok: true };
@@ -681,6 +719,210 @@ export async function fetchJobList(
       sort: params.sort as never,
     });
     return { ok: true, data: result };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Audits                                                              */
+/* ------------------------------------------------------------------ */
+
+export async function startAuditAction(
+  input: z.infer<typeof auditCreateSchema>,
+): Promise<ActionResult<{ auditId: string }>> {
+  const parsed = auditCreateSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const audit = await createAudit(supabase, parsed.data);
+
+    const webhookUrl = process.env.N8N_AUDIT_WEBHOOK_URL;
+    const webhookSecret = process.env.N8N_WEBHOOK_SECRET;
+    if (webhookUrl) {
+      fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(webhookSecret ? { Authorization: `Bearer ${webhookSecret}` } : {}),
+        },
+        body: JSON.stringify({ audit_id: audit.id, url: parsed.data.url }),
+      }).catch(() => {});
+    }
+
+    revalidatePath("/audits");
+    revalidatePath("/dashboard");
+    return { ok: true, data: { auditId: audit.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteAuditAction(
+  auditId: string,
+): Promise<ActionResult> {
+  const parsed = uuidSchema.safeParse(auditId);
+  if (!parsed.success) return { ok: false, error: "Invalid audit id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await deleteAudit(supabase, parsed.data);
+    revalidatePath("/audits");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function generatePitchAction(
+  auditId: string,
+  opportunityIds: string[],
+): Promise<
+  ActionResult<{ pitchText: string; subjectLine: string; keyPoints: string[] }>
+> {
+  const parsedAudit = uuidSchema.safeParse(auditId);
+  if (!parsedAudit.success) return { ok: false, error: "Invalid audit id." };
+
+  const parsedPitch = pitchGenerateSchema.safeParse({
+    audit_id: auditId,
+    opportunity_ids: opportunityIds,
+  });
+  if (!parsedPitch.success) return fail(parsedPitch.error);
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const result = await generatePitch(supabase, parsedAudit.data, opportunityIds);
+    return {
+      ok: true,
+      data: {
+        pitchText: result.pitch_text,
+        subjectLine: result.subject_line,
+        keyPoints: result.key_points,
+      },
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Prospects                                                           */
+/* ------------------------------------------------------------------ */
+
+export async function createProspectAction(
+  input: z.infer<typeof prospectCreateSchema>,
+): Promise<ActionResult<{ id: string }>> {
+  const parsed = prospectCreateSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const prospect = await createProspect(supabase, parsed.data);
+    revalidatePath("/prospects");
+    return { ok: true, data: { id: prospect.id } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function updateProspectAction(
+  prospectId: string,
+  input: z.infer<typeof prospectUpdateSchema>,
+): Promise<ActionResult> {
+  const parsedId = uuidSchema.safeParse(prospectId);
+  if (!parsedId.success) return { ok: false, error: "Invalid prospect id." };
+
+  const parsed = prospectUpdateSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await updateProspect(supabase, parsedId.data, parsed.data);
+    revalidatePath("/prospects");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function deleteProspectAction(
+  prospectId: string,
+): Promise<ActionResult> {
+  const parsed = uuidSchema.safeParse(prospectId);
+  if (!parsed.success) return { ok: false, error: "Invalid prospect id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await deleteProspect(supabase, parsed.data);
+    revalidatePath("/prospects");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function linkAuditToProspectAction(
+  prospectId: string,
+  auditId: string,
+  isPrimary = false,
+): Promise<ActionResult> {
+  const parsedProspect = uuidSchema.safeParse(prospectId);
+  if (!parsedProspect.success) return { ok: false, error: "Invalid prospect id." };
+  const parsedAudit = uuidSchema.safeParse(auditId);
+  if (!parsedAudit.success) return { ok: false, error: "Invalid audit id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await linkAuditToProspect(supabase, parsedProspect.data, parsedAudit.data, isPrimary);
+    revalidatePath("/prospects");
+    revalidatePath("/audits");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function unlinkAuditFromProspectAction(
+  prospectId: string,
+  auditId: string,
+): Promise<ActionResult> {
+  const parsedProspect = uuidSchema.safeParse(prospectId);
+  if (!parsedProspect.success) return { ok: false, error: "Invalid prospect id." };
+  const parsedAudit = uuidSchema.safeParse(auditId);
+  if (!parsedAudit.success) return { ok: false, error: "Invalid audit id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await unlinkAuditFromProspect(supabase, parsedProspect.data, parsedAudit.data);
+    revalidatePath("/prospects");
+    revalidatePath("/audits");
+    return { ok: true };
   } catch (error) {
     return fail(error);
   }

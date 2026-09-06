@@ -1,6 +1,6 @@
 # Upwork Radar
 
-A personal opportunity-intelligence dashboard for Upwork + company career boards. Gmail saved-search alerts and ATS board polls flow through n8n into Supabase, get scored by DeepSeek, and surface in a decision-first Next.js dashboard — score, recommendation, matched evidence, and editable proposal drafts. Jobs you spot while browsing can be added manually by pasting their Upwork URL (details auto-fill when possible). Nothing is ever auto-applied.
+A personal opportunity-intelligence dashboard for Upwork + company career boards + website auditing. Gmail saved-search alerts and ATS board polls flow through n8n into Supabase, get scored by DeepSeek, and surface in a decision-first Next.js dashboard — score, recommendation, matched evidence, and editable proposal drafts. Jobs you spot while browsing can be added manually by pasting their Upwork URL (details auto-fill when possible). Nothing is ever auto-applied. The Website & Automation Opportunity Auditor analyzes business websites to identify UX, performance, accessibility, SEO, and automation improvement opportunities, then generates personalized outreach pitches.
 
 Pipeline: `Gmail / ATS boards → n8n → Supabase (Postgres) → Next.js dashboard`.
 
@@ -8,8 +8,8 @@ Pipeline: `Gmail / ATS boards → n8n → Supabase (Postgres) → Next.js dashbo
 
 - **Next.js 16** (App Router, TypeScript, Turbopack) — `src/`
 - **Supabase** — Postgres + Row Level Security + Supabase Auth (magic-link email login)
-- **n8n** — intake, AI scoring, proposal drafting, email notifications
-- **DeepSeek API** — strict-JSON scoring and proposal generation (server-side only)
+- **n8n** — intake, AI scoring, proposal drafting, email notifications, website auditing
+- **DeepSeek API** — strict-JSON scoring, proposal generation, and website audit analysis (server-side only)
 
 ## Prerequisites
 
@@ -46,14 +46,16 @@ Run in the Supabase SQL Editor, in order:
 7. `supabase/05_personas.sql` — multi-persona profiles (label, pillar, is_default)
 8. `supabase/06_ats_sources.sql` — `watched_companies` table, ATS columns on `jobs`
 9. `supabase/07_seed_watchlist.sql` — seed ~14 companies across 4 pillars
+10. `supabase/09_seed_ats_companies.sql` — seed ~9,935 companies from public ATS directory (Greenhouse, Ashby, Lever)
+10. `supabase/08_auditor.sql` — website auditor tables (audits, pages, technologies, issues, opportunities, prospects)
 
 **Auth:** enable Email provider in Supabase → Authentication → Providers (magic-link OTP). RLS policy file must run before first login.
 
 ## n8n
 
-Import the four workflows in [`n8n/workflows/`](./n8n/workflows/) and follow [`n8n/README.md`](./n8n/README.md). Summary:
+Import the workflows in [`n8n/workflows/`](./n8n/workflows/) and follow [`n8n/README.md`](./n8n/README.md). Summary:
 
-1. Import `01_intake.json`, `02_scoring.json`, `04_daily_digest.json`, `05_ats_intake.json`.
+1. Import `01_intake.json`, `02_scoring.json`, `04_daily_digest.json`, `05_ats_intake.json`, `10_audit_pipeline.json`, `11_audit_pitch.json`.
 2. Connect Gmail OAuth2 credentials; set env vars `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEEPSEEK_API_KEY`, `RADAR_EMAIL`.
 3. Re-select the referenced sub-workflow in the **Run Scoring** nodes (in both `01_intake.json` and `05_ats_intake.json`).
 4. Adjust the **Parse Email** regexes to match your alert email layout; tune the digest cron.
@@ -63,6 +65,10 @@ Proposals are generated **on demand only** — use the "Generate proposal" butto
 ### ATS Radar
 
 The `05_ats_intake.json` workflow polls ~14 company career boards (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee) every 6 hours. Companies are managed from Settings → Watched Companies. New jobs matching your 4-pillar keywords are auto-imported and scored. Paste any careers URL — the system auto-detects the ATS platform.
+
+### Website Auditor
+
+The `10_audit_pipeline.json` workflow performs website audits: page discovery via sitemap, fetch-based crawling with technology fingerprinting, AI-powered issue analysis, and opportunity detection. The `11_audit_pitch.json` workflow generates personalized outreach pitches on demand. Both are triggered via webhook from the Next.js dashboard.
 
 ## Commands
 

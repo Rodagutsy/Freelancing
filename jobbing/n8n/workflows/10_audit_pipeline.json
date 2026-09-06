@@ -1,0 +1,604 @@
+{
+  "name": "10 - Audit Pipeline (website -> audit_scores)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "audit",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "notes": "POST /audit with body { audit_id, url }. Requires Authorization header matching N8N_WEBHOOK_SECRET.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "audit-webhook-auth",
+          "name": "Audit Webhook Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({ status: 'queued', audit_id: $json.body.audit_id })}}"
+      },
+      "id": "b0001111-2222-3333-4444-555566667002",
+      "name": "Respond Immediately",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audits?id=eq.{{$json.body.audit_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ status: 'crawling' })}}",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667003",
+      "name": "Update Status Crawling",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const audit_id = $('Update Status Crawling').first().json.body ? $('Update Status Crawling').first().json.body[0].id : ($('Webhook').first().json.body ? $('Webhook').first().json.body.audit_id : null);\nconst url = $('Webhook').first().json.body ? $('Webhook').first().json.body.url : null;\nif (!audit_id || !url) throw new Error('Missing audit_id or url');\n\nconst base_url = url.replace(/\\/+$/, '');\nconst parsed = new URL(base_url);\nconst origin = parsed.origin;\n\nconst KEY_PATHS = ['/', '/about', '/about-us', '/services', '/products', '/pricing', '/contact', '/booking'];\nlet discovered = [];\n\ntry {\n  const sitemapUrl = origin + '/sitemap.xml';\n  const resp = await fetch(sitemapUrl, { signal: AbortSignal.timeout(5000) });\n  if (resp.ok) {\n    const xml = await resp.text();\n    const locMatches = xml.match(/<loc>\\s*<\\/loc>/gi) || [];\n    for (const m of locMatches) {\n      const loc = m.replace(/<loc>\\s*/i, '').replace(/\\s*<\\/loc>/i, '').trim();\n      try {\n        const u = new URL(loc);\n        if (u.origin === origin) {\n          discovered.push(u.pathname);\n        }\n      } catch {}\n    }\n  }\n} catch {}\n\nconst allPaths = [...new Set([...KEY_PATHS, ...discovered])];\nconst selected = allPaths.slice(0, 10);\n\nreturn selected.map(p => ({\n  json: {\n    audit_id,\n    base_url: origin,\n    path: p,\n    full_url: origin + p\n  }\n}));"
+      },
+      "id": "b0001111-2222-3333-4444-555566667004",
+      "name": "Page Discovery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 0],
+      "notes": "Fetches sitemap.xml and prioritizes key pages. Outputs 5-10 pages to crawl."
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const page = $input.first().json;\nconst url = page.full_url;\nif (!url) throw new Error('No URL to crawl');\n\nlet html = '';\ntry {\n  const resp = await fetch(url, {\n    signal: AbortSignal.timeout(15000),\n    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AuditBot/1.0)' }\n  });\n  if (!resp.ok) throw new Error('HTTP ' + resp.status);\n  html = await resp.text();\n} catch (e) {\n  return [{ json: { ...page, error: e.message, crawled_at: new Date().toISOString() } }];\n}\n\nfunction extract(tag, attr) {\n  const re = new RegExp('<' + tag + '[^>]*' + attr + '=\\\"([^\\\"]*?)\\\"', 'gi');\n  const m = re.exec(html);\n  return m ? m[1].trim() : '';\n}\n\nfunction extractMeta(name) {\n  const re = new RegExp('<meta[^>]+name=\\\"' + name + '\\\"[^>]+content=\\\"([^\\\"]*?)\\\"', 'gi');\n  const m = re.exec(html);\n  return m ? m[1].trim() : '';\n}\n\nconst title = extract('title', '').replace(/<[^>]+>/g, '').trim() || extract('title', '');\nconst meta_description = extractMeta('description');\nconst viewport = extract('meta', 'name') === 'viewport' ? extract('meta', 'content') : '';\nconst canonical = extract('link', 'rel') === 'canonical' ? extract('link', 'href') : '';\n\nconst formRe = /<form[^>]*>/gi;\nconst forms = [];\nlet fm;\nwhile ((fm = formRe.exec(html)) !== null) {\n  const tag = fm[0];\n  const action = (tag.match(/action=\\\"([^\\\"]*?)\\\"/) || [])[1] || '';\n  const method = (tag.match(/method=\\\"([^\\\"]*?)\\\"/) || [])[1] || 'GET';\n  const inputCount = (html.slice(fm.index).match(/<input[^>]*>/gi) || []).length;\n  forms.push({ action, method, input_count: inputCount });\n}\n\nconst linkRe = /<a[^>]+href=\\\"([^\\\"]*?)\\\"[^>]*>/gi;\nconst links = [];\nlet lm;\nwhile ((lm = linkRe.exec(html)) !== null) {\n  links.push(lm[1]);\n}\n\nconst imgRe = /<img[^>]*>/gi;\nconst images = [];\nlet im;\nwhile ((im = imgRe.exec(html)) !== null) {\n  const tag = im[0];\n  const alt = tag.match(/alt=\\\"([^\\\"]*?)\\\"/);\n  images.push({ has_alt: !!alt && alt[1].length > 0 });\n}\n\nconst h1Count = (html.match(/<h1[^>]*>/gi) || []).length;\nconst h2Count = (html.match(/<h2[^>]*>/gi) || []).length;\n\nconst TECH_FINGERPRINTS = {\n  'WordPress': /wp-content|wp-includes|wordpress/i,\n  'Shopify': /shopify|cdn\\.shopify\\.com/i,\n  'Calendly': /calendly\\.com|calendly\\.js/i,\n  'Jotform': /jotform\\.com|jotform\\.js/i,\n  'Typeform': /typeform\\.com|typeform\\.js/i,\n  'HubSpot': /hubspot|hs-scripts|hs-scripts\\.com/i,\n  'Google Analytics': /google-analytics\\.com|gtag|ga\\.js|analytics\\.js/i,\n  'Google Tag Manager': /googletagmanager\\.com|gtm\\.js/i,\n  'Intercom': /intercom\\.com|intercomcdn/i,\n  'Zendesk': /zendesk\\.com|zdassets\\.com/i,\n  'Stripe': /stripe\\.com|js\\.stripe\\.com/i,\n  'PayPal': /paypal\\.com|paypalobjects\\.com/i,\n  'WhatsApp': /whatsapp\\.com|wa\\.me|api\\.whatsapp\\.com/i,\n  'Next.js': /_next\\/|next\\.js/i,\n  'React': /react|reactdom|__next/i,\n  'Mailchimp': /mailchimp|list-manage\\.com|mc\\.us/i,\n  'Klaviyo': /klaviyo\\.com|klaviyo\\.js/i,\n  'Webflow': /webflow\\.com|wf-cdn/i\n};\n\nconst technologies = [];\nfor (const [name, re] of Object.entries(TECH_FINGERPRINTS)) {\n  if (re.test(html)) technologies.push(name);\n}\n\nconst images_no_alt = images.filter(i => !i.has_alt).length;\n\nreturn [{\n  json: {\n    ...page,\n    title,\n    meta_description,\n    viewport_tag: viewport,\n    canonical_tag: canonical,\n    forms,\n    links_count: links.length,\n    images_total: images.length,\n    images_no_alt,\n    h1_count: h1Count,\n    h2_count: h2Count,\n    technologies,\n    crawled_at: new Date().toISOString()\n  }\n}];"
+      },
+      "id": "b0001111-2222-3333-4444-555566667005",
+      "name": "Crawl Page",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1120, 0],
+      "notes": "Basic HTTP fetch for HTML extraction. Replace with Playwright community node for JS-rendered pages."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audit_pages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ audit_id: $json.audit_id, base_url: $json.base_url, path: $json.path, full_url: $json.full_url, title: $json.title, meta_description: $json.meta_description, viewport_tag: $json.viewport_tag, canonical_tag: $json.canonical_tag, forms: $json.forms, links_count: $json.links_count, images_total: $json.images_total, images_no_alt: $json.images_no_alt, h1_count: $json.h1_count, h2_count: $json.h2_count, technologies: $json.technologies, crawled_at: $json.crawled_at })}}",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667006",
+      "name": "Save Page",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 0]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audits?id=eq.{{$json.audit_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ status: 'analyzing' })}}",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667007",
+      "name": "Update Status Analyzing",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.DEEPSEEK_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ model: 'deepseek-chat', temperature: 0.3, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: 'You are a website analyst. Analyze the crawl data provided and identify UX, UI, performance, accessibility, SEO, and conversion issues. For each issue provide: category (one of: ux, ui, performance, accessibility, seo, conversion), severity (one of: critical, high, medium, low), title, description, evidence (quote from crawl data), recommendation, and classification (always \"observed\" for detected items). Return a JSON object with an \"issues\" array.' }, { role: 'user', content: 'Analyze this website crawl data:\\n\\nPages crawled: ' + JSON.stringify($('Save Page').all().map(i => i.json)) + '\\n\\nTechnologies detected: ' + JSON.stringify([...new Set($('Save Page').all().flatMap(i => i.json.technologies || []))]) }] })}}",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667008",
+      "name": "AI Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1960, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nconst content = input && input.choices && input.choices[0]\n  ? (input.choices[0].message && input.choices[0].message.content) || input.choices[0].text\n  : null;\nif (!content) throw new Error('DeepSeek returned no content: ' + JSON.stringify(input).slice(0, 500));\nlet cleaned = String(content).trim();\nconst fenced = cleaned.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/);\nif (fenced) cleaned = fenced[1].trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('DeepSeek analysis response is not JSON: ' + cleaned.slice(0, 500));\n}\nconst issues = Array.isArray(parsed.issues) ? parsed.issues : [];\nconst VALID_CATEGORIES = ['ux', 'ui', 'performance', 'accessibility', 'seo', 'conversion'];\nconst VALID_SEVERITIES = ['critical', 'high', 'medium', 'low'];\nconst validated = issues.map(issue => ({\n  category: VALID_CATEGORIES.includes(issue.category) ? issue.category : 'other',\n  severity: VALID_SEVERITIES.includes(issue.severity) ? issue.severity : 'medium',\n  title: String(issue.title || 'Untitled'),\n  description: String(issue.description || ''),\n  evidence: String(issue.evidence || ''),\n  recommendation: String(issue.recommendation || ''),\n  classification: 'observed'\n}));\nreturn { issues: validated };"
+      },
+      "id": "b0001111-2222-3333-4444-555566667009",
+      "name": "Parse AI Analysis",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2240, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audit_issues",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.issues.map(i => ({ audit_id: $('Update Status Crawling').first().json.body ? $('Update Status Crawling').first().json.body[0].id : $('Webhook').first().json.body.audit_id, category: i.category, severity: i.severity, title: i.title, description: i.description, evidence: i.evidence, recommendation: i.recommendation, classification: i.classification })))}}",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667010",
+      "name": "Save Issues",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2520, 0],
+      "notes": "Batch insert of validated issues into audit_issues table."
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audits?id=eq.{{$('Update Status Crawling').first().json.body ? $('Update Status Crawling').first().json.body[0].id : $('Webhook').first().json.body.audit_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ status: 'scoring' })}}",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667011",
+      "name": "Update Status Scoring",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2800, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const pages = $('Save Page').all().map(i => i.json);\nconst issues = $('Parse AI Analysis').first().json.issues;\nconst audit_id = $('Update Status Crawling').first().json.body ? $('Update Status Crawling').first().json.body[0].id : $('Webhook').first().json.body.audit_id;\n\nconst allTech = [...new Set(pages.flatMap(p => p.technologies || []))];\n\nlet seo_total = 10, seo_issues = 0;\nlet accessibility_total = 10, accessibility_issues = 0;\nlet performance_total = 10, performance_issues = 0;\nlet ui_total = 10, ui_issues = 0;\nlet ux_total = 10, ux_issues = 0;\nlet conversion_total = 10, conversion_issues = 0;\n\nfor (const issue of issues) {\n  const penalty = issue.severity === 'critical' ? 3 : issue.severity === 'high' ? 2 : issue.severity === 'medium' ? 1 : 0.5;\n  if (issue.category === 'seo') { seo_issues += penalty; seo_total -= penalty; }\n  if (issue.category === 'accessibility') { accessibility_issues += penalty; accessibility_total -= penalty; }\n  if (issue.category === 'performance') { performance_issues += penalty; performance_total -= penalty; }\n  if (issue.category === 'ui') { ui_issues += penalty; ui_total -= penalty; }\n  if (issue.category === 'ux') { ux_issues += penalty; ux_total -= penalty; }\n  if (issue.category === 'conversion') { conversion_issues += penalty; conversion_total -= penalty; }\n}\n\nconst clamp = v => Math.max(0, Math.min(10, Math.round(v * 10) / 10));\nconst seo_score = clamp(seo_total);\nconst accessibility_score = clamp(accessibility_total);\nconst performance_score = clamp(performance_total);\nconst ui_score = clamp(ui_total);\nconst ux_score = clamp(ux_total);\nconst conversion_score = clamp(conversion_total);\n\nconst overall_score = clamp(\n  seo_score * 0.20 +\n  accessibility_score * 0.15 +\n  performance_score * 0.20 +\n  ui_score * 0.15 +\n  ux_score * 0.15 +\n  conversion_score * 0.15\n);\n\nconst hasBooking = allTech.some(t => ['Calendly', 'Typeform'].includes(t));\nconst hasCRM = allTech.some(t => ['HubSpot', 'Intercom'].includes(t));\nconst hasForms = pages.some(p => (p.forms || []).length > 0);\nconst automation_score = clamp(\n  (hasBooking ? 3 : 0) +\n  (hasCRM ? 3 : 0) +\n  (hasForms ? 2 : 0) +\n  (allTech.includes('Google Analytics') ? 1 : 0) +\n  (allTech.includes('Google Tag Manager') ? 1 : 0)\n);\n\nreturn [{\n  json: {\n    audit_id,\n    ui_score,\n    ux_score,\n    performance_score,\n    accessibility_score,\n    seo_score,\n    conversion_score,\n    overall_score,\n    automation_score,\n    all_technologies: allTech\n  }\n}];"
+      },
+      "id": "b0001111-2222-3333-4444-555566667012",
+      "name": "Compute Scores",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [3080, 0]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audits?id=eq.{{$json.audit_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ ui_score: $json.ui_score, ux_score: $json.ux_score, performance_score: $json.performance_score, accessibility_score: $json.accessibility_score, seo_score: $json.seo_score, conversion_score: $json.conversion_score, overall_score: $json.overall_score, automation_score: $json.automation_score })}}",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667013",
+      "name": "Save Scores",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3360, 0]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audits?id=eq.{{$json.audit_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ status: 'opportunities' })}}",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667014",
+      "name": "Update Status Opportunities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3640, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.DEEPSEEK_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ model: 'deepseek-chat', temperature: 0.4, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: 'You identify automation and improvement opportunities from website analysis. Given the audit data, issues, technologies, and scores, propose actionable opportunities. For each opportunity provide: title, category (one of: lead_capture, appointment, crm, ecommerce, email, whatsapp, support, quote, internal_workflow, ai_agent, seo, performance, ui_ux, other), observed_signal (what you detected), evidence (crawl data), inference (what it implies), confidence (0-1), business_impact (one of: high, medium, low), automation_potential (one of: high, medium, low), estimated_complexity (one of: simple, moderate, complex), recommended_tools (array of strings), recommended_workflow (text description), implementation_notes (text), outreach_angle (how to pitch this), score (0-100). Return a JSON object with an \"opportunities\" array.' }, { role: 'user', content: 'Website: ' + $('Update Status Crawling').first().json.body[0].id + '\\n\\nPages crawled: ' + JSON.stringify($('Save Page').all().map(i => ({ url: i.json.full_url, title: i.json.title, forms: i.json.forms, technologies: i.json.technologies }))) + '\\n\\nTechnologies: ' + JSON.stringify($('Compute Scores').first().json.all_technologies) + '\\n\\nIssues found: ' + JSON.stringify($('Parse AI Analysis').first().json.issues) + '\\n\\nScores: overall=' + $('Compute Scores').first().json.overall_score + ', seo=' + $('Compute Scores').first().json.seo_score + ', performance=' + $('Compute Scores').first().json.performance_score + ', accessibility=' + $('Compute Scores').first().json.accessibility_score + ', conversion=' + $('Compute Scores').first().json.conversion_score + ', automation=' + $('Compute Scores').first().json.automation_score }] })}}",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667015",
+      "name": "AI Opportunity Analysis",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3920, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nconst content = input && input.choices && input.choices[0]\n  ? (input.choices[0].message && input.choices[0].message.content) || input.choices[0].text\n  : null;\nif (!content) throw new Error('DeepSeek returned no content: ' + JSON.stringify(input).slice(0, 500));\nlet cleaned = String(content).trim();\nconst fenced = cleaned.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/);\nif (fenced) cleaned = fenced[1].trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('DeepSeek opportunities response is not JSON: ' + cleaned.slice(0, 500));\n}\nconst opportunities = Array.isArray(parsed.opportunities) ? parsed.opportunities : [];\nconst VALID_CATEGORIES = ['lead_capture', 'appointment', 'crm', 'ecommerce', 'email', 'whatsapp', 'support', 'quote', 'internal_workflow', 'ai_agent', 'seo', 'performance', 'ui_ux', 'other'];\nconst VALID_IMPACT = ['high', 'medium', 'low'];\nconst VALID_AUTOMATION = ['high', 'medium', 'low'];\nconst VALID_COMPLEXITY = ['simple', 'moderate', 'complex'];\nconst validated = opportunities.map(opp => ({\n  title: String(opp.title || 'Untitled'),\n  category: VALID_CATEGORIES.includes(opp.category) ? opp.category : 'other',\n  observed_signal: String(opp.observed_signal || ''),\n  evidence: String(opp.evidence || ''),\n  inference: String(opp.inference || ''),\n  confidence: Math.max(0, Math.min(1, Number(opp.confidence) || 0.5)),\n  business_impact: VALID_IMPACT.includes(opp.business_impact) ? opp.business_impact : 'medium',\n  automation_potential: VALID_AUTOMATION.includes(opp.automation_potential) ? opp.automation_potential : 'medium',\n  estimated_complexity: VALID_COMPLEXITY.includes(opp.estimated_complexity) ? opp.estimated_complexity : 'moderate',\n  recommended_tools: Array.isArray(opp.recommended_tools) ? opp.recommended_tools : [],\n  recommended_workflow: String(opp.recommended_workflow || ''),\n  implementation_notes: String(opp.implementation_notes || ''),\n  outreach_angle: String(opp.outreach_angle || ''),\n  score: Math.max(0, Math.min(100, Number(opp.score) || 50))\n}));\nreturn { opportunities: validated };"
+      },
+      "id": "b0001111-2222-3333-4444-555566667016",
+      "name": "Parse Opportunities",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [4200, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audit_opportunities",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json.opportunities.map(o => ({ audit_id: $('Update Status Crawling').first().json.body ? $('Update Status Crawling').first().json.body[0].id : $('Webhook').first().json.body.audit_id, title: o.title, category: o.category, observed_signal: o.observed_signal, evidence: o.evidence, inference: o.inference, confidence: o.confidence, business_impact: o.business_impact, automation_potential: o.automation_potential, estimated_complexity: o.estimated_complexity, recommended_tools: o.recommended_tools, recommended_workflow: o.recommended_workflow, implementation_notes: o.implementation_notes, outreach_angle: o.outreach_angle, score: o.score })))}}",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667017",
+      "name": "Save Opportunities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4480, 0],
+      "notes": "Insert each opportunity into audit_opportunities table."
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audits?id=eq.{{$('Update Status Crawling').first().json.body ? $('Update Status Crawling').first().json.body[0].id : $('Webhook').first().json.body.audit_id}}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Prefer",
+              "value": "return=representation"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ status: 'completed', completed_at: new Date().toISOString() })}}",
+        "options": {}
+      },
+      "id": "b0001111-2222-3333-4444-555566667018",
+      "name": "Update Status Completed",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [4760, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "Respond Immediately", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Respond Immediately": {
+      "main": [
+        [
+          { "node": "Update Status Crawling", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Update Status Crawling": {
+      "main": [
+        [
+          { "node": "Page Discovery", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Page Discovery": {
+      "main": [
+        [
+          { "node": "Crawl Page", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Crawl Page": {
+      "main": [
+        [
+          { "node": "Save Page", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Save Page": {
+      "main": [
+        [
+          { "node": "Update Status Analyzing", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Update Status Analyzing": {
+      "main": [
+        [
+          { "node": "AI Analysis", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "AI Analysis": {
+      "main": [
+        [
+          { "node": "Parse AI Analysis", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse AI Analysis": {
+      "main": [
+        [
+          { "node": "Save Issues", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Save Issues": {
+      "main": [
+        [
+          { "node": "Update Status Scoring", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Update Status Scoring": {
+      "main": [
+        [
+          { "node": "Compute Scores", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Compute Scores": {
+      "main": [
+        [
+          { "node": "Save Scores", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Save Scores": {
+      "main": [
+        [
+          { "node": "Update Status Opportunities", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Update Status Opportunities": {
+      "main": [
+        [
+          { "node": "AI Opportunity Analysis", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "AI Opportunity Analysis": {
+      "main": [
+        [
+          { "node": "Parse Opportunities", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse Opportunities": {
+      "main": [
+        [
+          { "node": "Save Opportunities", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Save Opportunities": {
+      "main": [
+        [
+          { "node": "Update Status Completed", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

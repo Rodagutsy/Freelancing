@@ -7,13 +7,13 @@
           "interval": [
             {
               "field": "hours",
-              "hoursInterval": 6
+              "hoursInterval": 12
             }
           ]
         }
       },
       "id": "a0001111-2222-3333-4444-555566667777",
-      "name": "Every 6 Hours",
+      "name": "Every 12 Hours",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
       "position": [0, 0]
@@ -169,7 +169,7 @@
     }
   ],
   "connections": {
-    "Every 6 Hours": {
+    "Every 12 Hours": {
       "main": [[{ "node": "Load Watched Companies", "type": "main", "index": 0 }]]
     },
     "Load Watched Companies": {

@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { nonEmptyText, optionalUrlSchema, textArraySchema } from "@/lib/schemas/common";
+import { assertSafeUrl } from "@/lib/schemas/audit";
 
 export const portfolioProjectInputSchema = z.object({
   title: nonEmptyText.max(200, "Keep the title under 200 characters"),
@@ -10,11 +11,19 @@ export const portfolioProjectInputSchema = z.object({
   evidence_links: z
     .array(z.string().trim().max(1000))
     .max(20)
-    .default([]),
+    .default([])
+    .refine(
+      (links) => links.every((l) => !l || assertSafeUrl(l)),
+      "One or more evidence links are not publicly accessible.",
+    ),
   image_urls: z
     .array(z.string().trim().url("Must be a valid URL").max(1000))
     .max(10, "Up to 10 images per project")
-    .default([]),
+    .default([])
+    .refine(
+      (urls) => urls.every((u) => assertSafeUrl(u)),
+      "One or more image URLs are not publicly accessible.",
+    ),
   source_url: optionalUrlSchema,
   can_claim_text: nonEmptyText.max(3000),
   cannot_claim_text: z.string().trim().max(3000).nullable().optional(),

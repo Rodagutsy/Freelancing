@@ -57,8 +57,9 @@ export async function chatJson<T>(
 
   if (!response.ok) {
     const body = await response.text().catch(() => "");
+    console.error(`DeepSeek API error ${response.status}: ${body.slice(0, 500)}`);
     throw new Error(
-      `DeepSeek returned ${response.status}: ${body.slice(0, 500)}`,
+      `DeepSeek API error (${response.status}). Please try again.`,
     );
   }
 

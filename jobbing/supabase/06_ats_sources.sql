@@ -31,6 +31,9 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_watched_companies_url
 -- RLS
 ALTER TABLE watched_companies ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Authenticated full access on watched_companies"
+  ON watched_companies;
+
 CREATE POLICY "Authenticated full access on watched_companies"
   ON watched_companies
   FOR ALL

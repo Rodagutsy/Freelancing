@@ -28,6 +28,8 @@ export const NAV_ITEMS = [
   { href: "/jobs", label: "Jobs" },
   { href: "/applications", label: "Applications" },
   { href: "/portfolio", label: "Portfolio" },
+  { href: "/audits", label: "Audits" },
+  { href: "/prospects", label: "Prospects" },
   { href: "/settings", label: "Settings" },
 ] as const;
 
@@ -84,4 +86,37 @@ export const IMPLEMENTATION_STATUS_LABEL: Record<string, string> = {
   designed: "Designed",
   deployed: "Deployed",
   hybrid: "Hybrid",
+};
+
+export const AUDIT_CATEGORY_META: Record<
+  string,
+  { label: string; tone: "success" | "warning" | "danger" | "info" | "muted" }
+> = {
+  ux: { label: "UX", tone: "info" },
+  ui: { label: "UI", tone: "info" },
+  performance: { label: "Performance", tone: "warning" },
+  accessibility: { label: "Accessibility", tone: "danger" },
+  seo: { label: "SEO", tone: "warning" },
+  conversion: { label: "Conversion", tone: "success" },
+  technical: { label: "Technical", tone: "muted" },
+};
+
+export const OPPORTUNITY_META: Record<
+  string,
+  { label: string; tone: "success" | "warning" | "danger" | "info" | "muted" }
+> = {
+  lead_capture: { label: "Lead Capture", tone: "success" },
+  appointment: { label: "Appointment Booking", tone: "success" },
+  crm: { label: "CRM", tone: "info" },
+  ecommerce: { label: "E-commerce", tone: "info" },
+  email: { label: "Email Automation", tone: "info" },
+  whatsapp: { label: "WhatsApp", tone: "warning" },
+  support: { label: "Support", tone: "warning" },
+  quote: { label: "Quote/Estimate", tone: "info" },
+  internal_workflow: { label: "Internal Workflow", tone: "muted" },
+  ai_agent: { label: "AI Agent", tone: "warning" },
+  seo: { label: "SEO", tone: "info" },
+  performance: { label: "Performance", tone: "warning" },
+  ui_ux: { label: "UI/UX", tone: "info" },
+  other: { label: "Other", tone: "muted" },
 };

@@ -3,6 +3,8 @@ import {
   Briefcase,
   ClipboardCheck,
   FolderKanban,
+  BarChart3,
+  Users,
   Settings,
   type LucideIcon,
 } from "lucide-react";
@@ -18,6 +20,8 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/jobs", label: "Jobs", icon: Briefcase },
   { href: "/applications", label: "Applications", icon: ClipboardCheck },
   { href: "/portfolio", label: "Portfolio", icon: FolderKanban },
+  { href: "/audits", label: "Audits", icon: BarChart3 },
+  { href: "/prospects", label: "Prospects", icon: Users },
 ];
 
 export const SETTINGS_ITEM: NavItem = {

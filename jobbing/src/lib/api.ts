@@ -17,8 +17,6 @@ export function errorResponse(error: unknown, status = 400) {
   const message =
     error instanceof z.ZodError
       ? error.issues.map((i) => i.message).join(", ")
-      : error instanceof Error
-        ? error.message
-        : "Something went wrong.";
+      : "Something went wrong.";
   return NextResponse.json({ error: message }, { status });
 }

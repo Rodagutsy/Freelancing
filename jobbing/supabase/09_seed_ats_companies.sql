@@ -1,0 +1,18 @@
+-- 09_seed_ats_companies.sql
+-- Reference file: seed data has been split into 10 parts for Supabase SQL Editor
+-- Run sequentially: part01 through part10
+-- All parts use ON CONFLICT DO NOTHING, safe to re-run in any order
+--
+-- Files:
+--   09_seed_ats_companies_part01.sql  (20 INSERT statements, ~1000 rows)
+--   09_seed_ats_companies_part02.sql  (20 INSERT statements, ~1000 rows)
+--   09_seed_ats_companies_part03.sql  (20 INSERT statements, ~1000 rows)
+--   09_seed_ats_companies_part04.sql  (20 INSERT statements, ~1000 rows)
+--   09_seed_ats_companies_part05.sql  (20 INSERT statements, ~1000 rows)
+--   09_seed_ats_companies_part06.sql  (20 INSERT statements, ~1000 rows)
+--   09_seed_ats_companies_part07.sql  (20 INSERT statements, ~1000 rows)
+--   09_seed_ats_companies_part08.sql  (20 INSERT statements, ~1000 rows)
+--   09_seed_ats_companies_part09.sql  (20 INSERT statements, ~1000 rows)
+--   09_seed_ats_companies_part10.sql  (19 INSERT statements, ~935 rows)
+--
+-- Total: 199 INSERT statements, 9935 data rows

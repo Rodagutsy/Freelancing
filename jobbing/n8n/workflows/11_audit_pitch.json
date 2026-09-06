@@ -1,0 +1,252 @@
+{
+  "name": "11 - Audit Pitch (audit -> pitch)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "audit/pitch",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "c0001111-2222-3333-4444-555566668001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "notes": "POST /audit/pitch with body { audit_id, opportunity_ids[] }. Requires Authorization header matching N8N_WEBHOOK_SECRET.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "pitch-webhook-auth",
+          "name": "Pitch Webhook Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({ status: 'generating' })}}"
+      },
+      "id": "c0001111-2222-3333-4444-555566668002",
+      "name": "Respond Immediately",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [280, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audits?id=eq.{{$json.body.audit_id}}&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c0001111-2222-3333-4444-555566668003",
+      "name": "Load Audit",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [560, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audit_opportunities?id=in.({{$json.body.opportunity_ids.join(',')}})&audit_id=eq.{{$json.body.audit_id}}&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c0001111-2222-3333-4444-555566668004",
+      "name": "Load Opportunities",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audit_issues?audit_id=eq.{{$json.body.audit_id}}&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c0001111-2222-3333-4444-555566668005",
+      "name": "Load Issues",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 0]
+    },
+    {
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.SUPABASE_URL}}/rest/v1/audit_technologies?audit_id=eq.{{$json.body.audit_id}}&select=*",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "apikey",
+              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "c0001111-2222-3333-4444-555566668006",
+      "name": "Load Technologies",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1400, 0]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.deepseek.com/chat/completions",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.DEEPSEEK_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ model: 'deepseek-chat', temperature: 0.5, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: 'You are a business automation consultant generating a sales pitch. You are given audit data for a website including scores, detected issues, technologies in use, and selected improvement opportunities. Generate a compelling, personalized pitch that:\\n\\n1. Opens with a specific observation about their website (from the audit data)\\n2. Presents the top 3-5 most impactful opportunities, each backed by evidence from the crawl\\n3. Shows concrete ROI estimates or time savings where possible\\n4. References specific technologies they already use and how automation integrates with them\\n5. Ends with a clear call to action\\n\\nTone: professional, consultative, not pushy. Length: 400-800 words. Format as JSON with fields: subject (email subject line), body_html (HTML formatted email body), body_text (plain text version), summary (one-line summary for Slack/notification).' }, { role: 'user', content: 'AUDIT DATA:\\n' + JSON.stringify($('Load Audit').first().json[0] || $('Load Audit').first().json) + '\\n\\nTECHNOLOGIES DETECTED:\\n' + JSON.stringify($('Load Technologies').first().json) + '\\n\\nISSUES FOUND:\\n' + JSON.stringify($('Load Issues').first().json) + '\\n\\nSELECTED OPPORTUNITIES:\\n' + JSON.stringify($('Load Opportunities').first().json) }] })}}",
+        "options": {}
+      },
+      "id": "c0001111-2222-3333-4444-555566668007",
+      "name": "Generate Pitch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1680, 0]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "const input = $input.first().json;\nconst content = input && input.choices && input.choices[0]\n  ? (input.choices[0].message && input.choices[0].message.content) || input.choices[0].text\n  : null;\nif (!content) throw new Error('DeepSeek returned no content: ' + JSON.stringify(input).slice(0, 500));\nlet cleaned = String(content).trim();\nconst fenced = cleaned.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/);\nif (fenced) cleaned = fenced[1].trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('DeepSeek pitch response is not JSON: ' + cleaned.slice(0, 500));\n}\nif (!parsed.subject || !parsed.body_html) {\n  throw new Error('Pitch missing required fields (subject, body_html)');\n}\nreturn {\n  subject: String(parsed.subject),\n  body_html: String(parsed.body_html),\n  body_text: String(parsed.body_text || parsed.body_html.replace(/<[^>]+>/g, ' ').replace(/\\s+/g, ' ').trim()),\n  summary: String(parsed.summary || ''),\n  audit_id: $('Webhook').first().json.body.audit_id,\n  opportunity_ids: $('Webhook').first().json.body.opportunity_ids,\n  generated_at: new Date().toISOString()\n};"
+      },
+      "id": "c0001111-2222-3333-4444-555566668008",
+      "name": "Parse Pitch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1960, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({ status: 'completed', audit_id: $json.audit_id, subject: $json.subject, body_html: $json.body_html, body_text: $json.body_text, summary: $json.summary, opportunity_ids: $json.opportunity_ids, generated_at: $json.generated_at })}}"
+      },
+      "id": "c0001111-2222-3333-4444-555566668009",
+      "name": "Return Pitch",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2240, 0]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          { "node": "Respond Immediately", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Respond Immediately": {
+      "main": [
+        [
+          { "node": "Load Audit", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Load Audit": {
+      "main": [
+        [
+          { "node": "Load Opportunities", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Load Opportunities": {
+      "main": [
+        [
+          { "node": "Load Issues", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Load Issues": {
+      "main": [
+        [
+          { "node": "Load Technologies", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Load Technologies": {
+      "main": [
+        [
+          { "node": "Generate Pitch", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Generate Pitch": {
+      "main": [
+        [
+          { "node": "Parse Pitch", "type": "main", "index": 0 }
+        ]
+      ]
+    },
+    "Parse Pitch": {
+      "main": [
+        [
+          { "node": "Return Pitch", "type": "main", "index": 0 }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

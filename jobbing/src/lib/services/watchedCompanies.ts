@@ -3,6 +3,7 @@ import type {
   WatchedCompanyPlatform,
   WatchedCompanyRow,
 } from "@/lib/types";
+import { assertSafeUrl } from "@/lib/schemas/audit";
 
 /** Supported ATS platforms and their URL patterns for detection. */
 const ATS_PATTERNS: Array<{
@@ -29,6 +30,9 @@ export interface DetectAtsResult {
  * verifies the endpoint is live (returns HTTP 200-ish).
  */
 export async function detectAts(url: string): Promise<DetectAtsResult> {
+  if (!assertSafeUrl(url)) {
+    throw new Error("This URL is not publicly accessible.");
+  }
   const parsed = new URL(url);
   const origin = parsed.origin + parsed.pathname;
 
