@@ -11,9 +11,12 @@ import {
 import { createClient } from "@/lib/supabase/server";
 import { getProspect, getProspectAudits } from "@/lib/services/prospects";
 import { getAudit } from "@/lib/services/audits";
+import { getProspectOutbound } from "@/lib/services/outreach";
 import { formatRelative } from "@/lib/utils";
+import { OUTBOUND_STATUS_META } from "@/lib/constants";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
+import { DraftOutreachButton } from "@/components/outbounds/DraftOutreachButton";
 import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
@@ -68,6 +71,12 @@ export default async function ProspectDetailPage({
       return { ...link, audit };
     }),
   );
+
+  const outbound = await getProspectOutbound(supabase, prospect.id);
+  const outboundMeta = outbound ? OUTBOUND_STATUS_META[outbound.status] : null;
+  const canDraft =
+    !outbound ||
+    ["done", "rejected", "do_not_contact", "failed"].includes(outbound.status);
 
   return (
     <div>
@@ -177,6 +186,50 @@ export default async function ProspectDetailPage({
           </div>
         </section>
       )}
+
+      <section className={styles.outreach} aria-labelledby="outreach-heading">
+        <div className={styles.outreachHead}>
+          <h2 id="outreach-heading" className={styles.sectionTitle}>
+            Outreach
+          </h2>
+          {outbound && outboundMeta && (
+            <StatusBadge label={outboundMeta.label} tone={outboundMeta.tone} />
+          )}
+        </div>
+
+        {outbound ? (
+          <div className={styles.outreachRow}>
+            <a href={`/outbounds/${outbound.id}`} className={styles.auditLink}>
+              <span className={styles.auditName}>
+                {outbound.steps.length} email sequence
+                {outbound.personalization_angle
+                  ? ` — ${outbound.personalization_angle}`
+                  : ""}
+              </span>
+            </a>
+            {canDraft && (
+              <DraftOutreachButton
+                prospectId={prospect.id}
+                auditIds={auditLinks.map((l) => l.audit_id)}
+              />
+            )}
+          </div>
+        ) : prospect.contact_email ? (
+          <div className={styles.outreachRow}>
+            <p className={styles.outreachHint}>
+              No campaign yet. Draft a personalized sequence from your audit evidence.
+            </p>
+            <DraftOutreachButton
+              prospectId={prospect.id}
+              auditIds={auditLinks.map((l) => l.audit_id)}
+            />
+          </div>
+        ) : (
+          <p className={styles.outreachHint}>
+            Add a contact email to this prospect before drafting outreach.
+          </p>
+        )}
+      </section>
     </div>
   );
 }

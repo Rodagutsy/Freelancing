@@ -1,0 +1,202 @@
+.headerMeta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-muted);
+}
+
+.headerMetaItem {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.prospectLink {
+  color: var(--gold-400);
+  font-weight: 600;
+}
+
+.prospectLink:hover {
+  color: var(--gold-500);
+  text-decoration: underline;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  margin-bottom: var(--space-8);
+}
+
+.sectionTitle {
+  font-size: var(--text-h2);
+  line-height: var(--text-h2-lh);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.metaGrid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.metaItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-secondary);
+}
+
+.link {
+  color: var(--gold-400);
+  font-weight: 600;
+}
+
+.link:hover {
+  color: var(--gold-500);
+  text-decoration: underline;
+}
+
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-secondary);
+}
+
+.messageList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.messageHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.messageStep {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-body-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.messageSubject {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.messageMeta {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--text-muted);
+}
+
+.replyHint {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-muted);
+}
+
+.replyList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.reply {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+
+.replyHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.replySubject {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.replyBody {
+  white-space: pre-wrap;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-primary);
+}
+
+.replyReason {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  font-style: italic;
+  color: var(--text-muted);
+}
+
+.suggestWrap {
+  padding: var(--space-3);
+  background: var(--bg-surface-alt, var(--bg-surface));
+  border-left: 3px solid var(--gold-400);
+  border-radius: var(--radius-sm);
+}
+
+.suggestLabel {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: var(--space-1);
+}
+
+.suggestBody {
+  white-space: pre-wrap;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-primary);
+}

@@ -335,6 +335,8 @@ export interface ProspectRow {
   automation_score: number | null;
   technology_stack: string[];
   pipeline_status: PipelineStatus;
+  contact_type: "corporate" | "sole_trader" | "individual" | "unknown";
+  reason_for_contact: string | null;
   notes: string | null;
   created_at: string;
   updated_at: string;
@@ -345,6 +347,174 @@ export interface ProspectAuditRow {
   audit_id: string;
   is_primary: boolean;
   created_at: string;
+}
+
+/* ------------------------------------------------------------------ */
+/* Outbound prospecting types                                          */
+/* ------------------------------------------------------------------ */
+
+export type OutboundStatus =
+  | "researching"
+  | "pitch_drafted"
+  | "need_approval"
+  | "approved"
+  | "rejected"
+  | "sending"
+  | "sent"
+  | "replied"
+  | "follow_up_1"
+  | "follow_up_2"
+  | "done"
+  | "do_not_contact"
+  | "failed";
+
+export type OutboundMessageStatus =
+  | "draft"
+  | "queued"
+  | "sent"
+  | "delivered"
+  | "opened"
+  | "failed";
+
+export type SuppressionReason =
+  | "unsubscribed"
+  | "replied_stop"
+  | "bounced"
+  | "manual"
+  | "legal";
+
+export type ReplyClassification =
+  | "interested"
+  | "question"
+  | "not_interested"
+  | "wrong_person"
+  | "unsubscribe";
+
+export interface OutboundStep {
+  order: number;
+  day_offset: number;
+  subject: string;
+  body: string;
+}
+
+export interface EmailSequenceRow {
+  id: string;
+  name: string;
+  description: string | null;
+  steps: OutboundStep[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OutboundRow {
+  id: string;
+  prospect_id: string;
+  email_sequence_id: string | null;
+  status: OutboundStatus;
+  current_step: number;
+  steps: OutboundStep[];
+  personalization_angle: string | null;
+  confidence: number | null;
+  subscribed: boolean;
+  approval_note: string | null;
+  version: number;
+  replies: unknown;
+  reply_classification: ReplyClassification | null;
+  sent_at: string | null;
+  replied_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface OutboundMessageRow {
+  id: string;
+  outbound_id: string;
+  step_no: number;
+  subject: string;
+  body: string;
+  status: OutboundMessageStatus;
+  message_id: string | null;
+  provider: string | null;
+  error: string | null;
+  sent_at: string | null;
+  opened_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+/** One entry in the `outbounds.replies` JSONB array. */
+export interface StoredReply {
+  id: string;
+  from: string;
+  subject: string | null;
+  body: string;
+  received_at: string;
+  classification: ReplyClassification | null;
+  classification_reason: string | null;
+  suggested_reply: string | null;
+}
+
+export interface SuppressedContactRow {
+  id: string;
+  email: string;
+  reason: SuppressionReason;
+  source_outbound_id: string | null;
+  note: string | null;
+  created_at: string;
+}
+
+/** Read-model: outbounds joined to prospects. */
+export interface OutboundFeedRow {
+  id: string;
+  prospect_id: string;
+  status: OutboundStatus;
+  current_step: number;
+  steps: OutboundStep[];
+  personalization_angle: string | null;
+  confidence: number | null;
+  subscribed: boolean;
+  version: number;
+  reply_classification: ReplyClassification | null;
+  sent_at: string | null;
+  replied_at: string | null;
+  created_at: string;
+  updated_at: string;
+  company_name: string;
+  contact_email: string | null;
+  contact_name: string | null;
+  contact_type: string;
+  industry: string | null;
+  location: string | null;
+  website_score: number | null;
+  automation_score: number | null;
+  pipeline_status: PipelineStatus;
+  reason_for_contact: string | null;
+}
+
+/** Read-model: outbound messages joined to campaign + prospect (sending pipeline). */
+export interface OutboundMessageFeedRow {
+  id: string;
+  outbound_id: string;
+  step_no: number;
+  subject: string;
+  body: string;
+  message_status: OutboundMessageStatus;
+  provider_message_id: string | null;
+  provider: string | null;
+  error: string | null;
+  sent_at: string | null;
+  opened_at: string | null;
+  message_created_at: string;
+  outbound_status: OutboundStatus;
+  current_step: number;
+  steps: OutboundStep[];
+  outbound_sent_at: string | null;
+  prospect_id: string;
+  company_name: string;
+  contact_name: string | null;
+  contact_email: string | null;
+  industry: string | null;
+  location: string | null;
 }
 
 declare module "@supabase/supabase-js" {

@@ -5,14 +5,14 @@ import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/actions";
-import { NAV_ITEMS, SETTINGS_ITEM } from "@/components/layout/nav";
+import { NAV_ITEMS, SETTINGS_ITEM, isNavActive } from "@/components/layout/nav";
 import styles from "./SidebarNav.module.css";
 
 export function SidebarNav() {
   const pathname = usePathname();
+  const navItems = [...NAV_ITEMS, SETTINGS_ITEM];
 
-  const isActive = (href: string) =>
-    pathname === href || pathname.startsWith(`${href}/`);
+  const isActive = (href: string) => isNavActive(navItems, pathname, href);
 
   return (
     <nav className={styles.nav} aria-label="Main navigation">

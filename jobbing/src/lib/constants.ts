@@ -1,4 +1,4 @@
-import type { ApplicationOutcome, Recommendation } from "@/lib/types/database";
+import type { ApplicationOutcome, OutboundStatus, Recommendation, ReplyClassification, SuppressionReason } from "@/lib/types/database";
 import type { PersonaPillar } from "@/lib/types";
 
 export const PILLAR_META: Record<PersonaPillar, { label: string; tone: "info" | "success" | "warning" | "muted" }> = {
@@ -119,4 +119,57 @@ export const OPPORTUNITY_META: Record<
   performance: { label: "Performance", tone: "warning" },
   ui_ux: { label: "UI/UX", tone: "info" },
   other: { label: "Other", tone: "muted" },
+};
+
+export const OUTBOUND_STATUS_META: Record<
+  OutboundStatus,
+  { label: string; tone: "success" | "warning" | "danger" | "info" | "muted" }
+> = {
+  researching: { label: "Researching", tone: "muted" },
+  pitch_drafted: { label: "Draft", tone: "info" },
+  need_approval: { label: "Needs approval", tone: "warning" },
+  approved: { label: "Approved", tone: "warning" },
+  rejected: { label: "Rejected", tone: "danger" },
+  sending: { label: "Sending", tone: "warning" },
+  sent: { label: "Sent", tone: "info" },
+  replied: { label: "Replied", tone: "success" },
+  follow_up_1: { label: "Follow-up 1", tone: "info" },
+  follow_up_2: { label: "Follow-up 2", tone: "info" },
+  done: { label: "Done", tone: "success" },
+  do_not_contact: { label: "Do not contact", tone: "danger" },
+  failed: { label: "Failed", tone: "danger" },
+};
+
+export const OUTBOUND_MESSAGE_STATUS_META: Record<
+  string,
+  { label: string; tone: "success" | "warning" | "danger" | "info" | "muted" }
+> = {
+  draft: { label: "Draft", tone: "muted" },
+  queued: { label: "Queued", tone: "info" },
+  sent: { label: "Sent", tone: "info" },
+  delivered: { label: "Delivered", tone: "success" },
+  opened: { label: "Opened", tone: "success" },
+  failed: { label: "Failed", tone: "danger" },
+};
+
+export const REPLY_CLASSIFICATION_META: Record<
+  ReplyClassification,
+  { label: string; tone: "success" | "warning" | "danger" | "info" | "muted" }
+> = {
+  interested: { label: "Interested", tone: "success" },
+  question: { label: "Question", tone: "info" },
+  not_interested: { label: "Not interested", tone: "muted" },
+  wrong_person: { label: "Wrong person", tone: "warning" },
+  unsubscribe: { label: "Unsubscribe", tone: "danger" },
+};
+
+export const SUPPRESSION_REASON_META: Record<
+  SuppressionReason,
+  { label: string; tone: "success" | "warning" | "danger" | "info" | "muted" }
+> = {
+  unsubscribed: { label: "Unsubscribed", tone: "danger" },
+  replied_stop: { label: "Replied stop", tone: "danger" },
+  bounced: { label: "Bounced", tone: "warning" },
+  manual: { label: "Manual block", tone: "info" },
+  legal: { label: "Legal hold", tone: "danger" },
 };

@@ -25,6 +25,7 @@ export async function createProspect(
       contact_email: input.contact_email || null,
       contact_phone: input.contact_phone ?? null,
       source: input.source ?? null,
+      contact_type: input.contact_type ?? "unknown",
       notes: input.notes ?? null,
     })
     .select()
@@ -82,6 +83,9 @@ export async function updateProspect(
   if (input.contact_email !== undefined) patch.contact_email = input.contact_email || null;
   if (input.contact_phone !== undefined) patch.contact_phone = input.contact_phone;
   if (input.source !== undefined) patch.source = input.source;
+  if (input.contact_type !== undefined) patch.contact_type = input.contact_type;
+  if (input.reason_for_contact !== undefined)
+    patch.reason_for_contact = input.reason_for_contact || null;
   if (input.notes !== undefined) patch.notes = input.notes;
   if (input.pipeline_status !== undefined) patch.pipeline_status = input.pipeline_status;
 

@@ -6,17 +6,16 @@ import { Menu } from "lucide-react";
 import { ToastProvider } from "@/components/common/Toast";
 import { SidebarNav } from "@/components/layout/SidebarNav";
 import { MobileNavDrawer } from "@/components/layout/MobileNavDrawer";
-import { NAV_ITEMS, SETTINGS_ITEM } from "@/components/layout/nav";
+import { NAV_ITEMS, SETTINGS_ITEM, findActiveNav } from "@/components/layout/nav";
 import styles from "./AppShell.module.css";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const pathname = usePathname();
 
-  const currentLabel =
-    [...NAV_ITEMS, SETTINGS_ITEM].find(
-      (item) => pathname === item.href || pathname.startsWith(`${item.href}/`),
-    )?.label ?? "Dashboard";
+  const navItems = [...NAV_ITEMS, SETTINGS_ITEM];
+  const activeHref = findActiveNav(navItems, pathname);
+  const currentLabel = navItems.find((item) => item.href === activeHref)?.label ?? "Dashboard";
 
   return (
     <ToastProvider>

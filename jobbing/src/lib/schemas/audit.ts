@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { nonEmptyText, optionalUrlSchema, uuidSchema } from "@/lib/schemas/common";
+import { prospectContactTypeSchema } from "@/lib/schemas/outreach";
 
 /* ------------------------------------------------------------------ */
 /* Audit                                                               */
@@ -136,6 +137,7 @@ export const prospectCreateSchema = z.object({
   contact_email: z.string().trim().email().optional().or(z.literal("")),
   contact_phone: z.string().trim().max(50).optional(),
   source: z.string().trim().max(200).optional(),
+  contact_type: prospectContactTypeSchema.optional(),
   notes: z.string().trim().max(5000).optional(),
 });
 
@@ -145,6 +147,7 @@ export const prospectUpdateSchema = prospectCreateSchema.partial().extend({
   pipeline_status: z
     .enum(["prospecting", "contacted", "proposal_sent", "negotiating", "won", "lost"])
     .optional(),
+  reason_for_contact: z.string().trim().max(2000).nullable().optional(),
 });
 
 export type ProspectUpdateInput = z.infer<typeof prospectUpdateSchema>;

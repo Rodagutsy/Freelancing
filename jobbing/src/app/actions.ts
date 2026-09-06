@@ -40,11 +40,35 @@ import {
 import {
   createProspect,
   deleteProspect,
+  getProspect,
   linkAuditToProspect,
   unlinkAuditFromProspect,
   updateProspect,
 } from "@/lib/services/prospects";
 import { generatePitch } from "@/lib/services/pitchGenerator";
+import { generateOutboundDraft, reviseOutboundDraft } from "@/lib/services/outreachDraft";
+import {
+  queueOutboundForSend,
+  queueOutboundStep,
+  markMessageSent,
+} from "@/lib/services/outboundSend";
+import { recordReply, markMessageOpened } from "@/lib/services/outboundTracking";
+import {
+  addSuppressedContact,
+  createOutboundWithMessages,
+  getOutbound,
+  removeSuppressedContact,
+  setOutboundSteps,
+  updateOutboundStatus,
+} from "@/lib/services/outreach";
+import {
+  outboundDraftInputSchema,
+  outboundRejectSchema,
+  outboundReplySchema,
+  outboundReviseSchema,
+  outboundStepsUpdateSchema,
+  suppressedContactCreateSchema,
+} from "@/lib/schemas/outreach";
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -922,6 +946,373 @@ export async function unlinkAuditFromProspectAction(
     await unlinkAuditFromProspect(supabase, parsedProspect.data, parsedAudit.data);
     revalidatePath("/prospects");
     revalidatePath("/audits");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Outreach (drafting + approval loop)                                 */
+/* ------------------------------------------------------------------ */
+
+const REVISION_ALLOWED: ReadonlySet<string> = new Set(["pitch_drafted", "rejected"]);
+
+export async function draftOutboundAction(
+  input: z.infer<typeof outboundDraftInputSchema>,
+): Promise<
+  ActionResult<{ outboundId: string; source: "ai" | "template"; status: string }>
+> {
+  const parsed = outboundDraftInputSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const draft = await generateOutboundDraft(supabase, parsed.data);
+    const { outbound } = await createOutboundWithMessages(supabase, {
+      prospectId: parsed.data.prospectId,
+      emailSequenceId: parsed.data.emailSequenceId ?? null,
+      steps: draft.steps,
+      personalizationAngle: draft.personalizationAngle,
+      status: "pitch_drafted",
+    });
+    revalidatePath("/outbounds");
+    revalidatePath(`/outbounds/${outbound.id}`);
+    revalidatePath(`/prospects/${parsed.data.prospectId}`);
+    return {
+      ok: true,
+      data: {
+        outboundId: outbound.id,
+        source: draft.source,
+        status: outbound.status,
+      },
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function approveOutboundAction(
+  outboundId: string,
+): Promise<ActionResult> {
+  const parsed = uuidSchema.safeParse(outboundId);
+  if (!parsed.success) return { ok: false, error: "Invalid outbound id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const outbound = await getOutbound(supabase, parsed.data);
+    if (!outbound) return { ok: false, error: "Outbound not found." };
+    if (!["pitch_drafted", "need_approval"].includes(outbound.status)) {
+      return { ok: false, error: "Only a draft can be approved." };
+    }
+    if (!outbound.steps || outbound.steps.length === 0) {
+      return { ok: false, error: "Add at least one email step before approving." };
+    }
+    await updateOutboundStatus(supabase, outbound.id, { status: "approved" });
+    revalidatePath("/outbounds");
+    revalidatePath(`/outbounds/${outbound.id}`);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function rejectOutboundAction(
+  outboundId: string,
+  input: z.infer<typeof outboundRejectSchema>,
+): Promise<ActionResult> {
+  const parsedId = uuidSchema.safeParse(outboundId);
+  if (!parsedId.success) return { ok: false, error: "Invalid outbound id." };
+  const parsed = outboundRejectSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const outbound = await getOutbound(supabase, parsedId.data);
+    if (!outbound) return { ok: false, error: "Outbound not found." };
+    if (!["pitch_drafted", "need_approval", "approved"].includes(outbound.status)) {
+      return { ok: false, error: "This outbound can no longer be rejected." };
+    }
+    await updateOutboundStatus(supabase, outbound.id, {
+      status: "rejected",
+      approvalNote: parsed.data.note ?? null,
+    });
+    revalidatePath("/outbounds");
+    revalidatePath(`/outbounds/${outbound.id}`);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function reviseOutboundAction(
+  outboundId: string,
+  input: z.infer<typeof outboundReviseSchema>,
+): Promise<ActionResult> {
+  const parsedId = uuidSchema.safeParse(outboundId);
+  if (!parsedId.success) return { ok: false, error: "Invalid outbound id." };
+  const parsed = outboundReviseSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const outbound = await getOutbound(supabase, parsedId.data);
+    if (!outbound) return { ok: false, error: "Outbound not found." };
+    if (!REVISION_ALLOWED.has(outbound.status)) {
+      return { ok: false, error: "Only rejected or unapproved drafts can be revised." };
+    }
+    const revised = await reviseOutboundDraft(supabase, outbound, parsed.data.instruction);
+    await setOutboundSteps(
+      supabase,
+      outbound.id,
+      revised.steps,
+      revised.personalizationAngle,
+    );
+    await updateOutboundStatus(supabase, outbound.id, { status: "pitch_drafted" });
+    revalidatePath("/outbounds");
+    revalidatePath(`/outbounds/${outbound.id}`);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function saveOutboundStepsAction(
+  outboundId: string,
+  input: z.infer<typeof outboundStepsUpdateSchema>,
+): Promise<ActionResult> {
+  const parsedId = uuidSchema.safeParse(outboundId);
+  if (!parsedId.success) return { ok: false, error: "Invalid outbound id." };
+  const parsed = outboundStepsUpdateSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const outbound = await getOutbound(supabase, parsedId.data);
+    if (!outbound) return { ok: false, error: "Outbound not found." };
+    if (!REVISION_ALLOWED.has(outbound.status)) {
+      return { ok: false, error: "Steps can only be edited while the outbound is a draft." };
+    }
+    await setOutboundSteps(
+      supabase,
+      outbound.id,
+      parsed.data.steps,
+      parsed.data.personalizationAngle ?? null,
+    );
+    revalidatePath("/outbounds");
+    revalidatePath(`/outbounds/${outbound.id}`);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function sendOutboundAction(
+  outboundId: string,
+): Promise<ActionResult<{ messageId: string; stepNo: number }>> {
+  const parsed = uuidSchema.safeParse(outboundId);
+  if (!parsed.success) return { ok: false, error: "Invalid outbound id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const { outbound, message } = await queueOutboundForSend(supabase, parsed.data);
+
+    const prospect = await getProspect(supabase, outbound.prospect_id);
+    const webhookUrl =
+      process.env.N8N_OUTBOUND_WEBHOOK_URL ?? process.env.N8N_AUDIT_WEBHOOK_URL;
+    const webhookSecret = process.env.N8N_WEBHOOK_SECRET;
+    if (webhookUrl && prospect) {
+      fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(webhookSecret ? { Authorization: `Bearer ${webhookSecret}` } : {}),
+        },
+        body: JSON.stringify({
+          outbound_id: outbound.id,
+          message_id: message.id,
+          step_no: message.step_no,
+          subject: message.subject,
+          body: message.body,
+          to: prospect.contact_email,
+          contact_name: prospect.contact_name,
+          company_name: prospect.company_name,
+        }),
+      }).catch(() => {});
+    }
+
+    revalidatePath("/outbounds");
+    revalidatePath(`/outbounds/${outbound.id}`);
+    return { ok: true, data: { messageId: message.id, stepNo: message.step_no } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function sendNextFollowUpAction(
+  outboundId: string,
+): Promise<ActionResult<{ messageId: string; stepNo: number }>> {
+  const parsed = uuidSchema.safeParse(outboundId);
+  if (!parsed.success) return { ok: false, error: "Invalid outbound id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const { outbound, message } = await queueOutboundStep(supabase, parsed.data, {
+      followUp: true,
+    });
+
+    const prospect = await getProspect(supabase, outbound.prospect_id);
+    const webhookUrl =
+      process.env.N8N_OUTBOUND_WEBHOOK_URL ?? process.env.N8N_AUDIT_WEBHOOK_URL;
+    const webhookSecret = process.env.N8N_WEBHOOK_SECRET;
+    if (webhookUrl && prospect) {
+      fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(webhookSecret ? { Authorization: `Bearer ${webhookSecret}` } : {}),
+        },
+        body: JSON.stringify({
+          outbound_id: outbound.id,
+          message_id: message.id,
+          step_no: message.step_no,
+          subject: message.subject,
+          body: message.body,
+          to: prospect.contact_email,
+          contact_name: prospect.contact_name,
+          company_name: prospect.company_name,
+          follow_up: true,
+        }),
+      }).catch(() => {});
+    }
+
+    revalidatePath("/outbounds");
+    revalidatePath(`/outbounds/${outbound.id}`);
+    return { ok: true, data: { messageId: message.id, stepNo: message.step_no } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function confirmOutboundMessageSentAction(
+  messageId: string,
+): Promise<ActionResult> {
+  const parsed = uuidSchema.safeParse(messageId);
+  if (!parsed.success) return { ok: false, error: "Invalid message id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const { outbound } = await markMessageSent(supabase, parsed.data, {
+      provider: "manual",
+    });
+    revalidatePath("/outbounds");
+    revalidatePath(`/outbounds/${outbound.id}`);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function markMessageOpenedAction(
+  messageId: string,
+): Promise<ActionResult> {
+  const parsed = uuidSchema.safeParse(messageId);
+  if (!parsed.success) return { ok: false, error: "Invalid message id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const message = await markMessageOpened(supabase, parsed.data);
+    revalidatePath(`/outbounds/${message.outbound_id}`);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function recordReplyAction(
+  input: z.infer<typeof outboundReplySchema>,
+): Promise<ActionResult> {
+  const parsed = outboundReplySchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const { outbound } = await recordReply(supabase, parsed.data);
+    revalidatePath("/outbounds");
+    revalidatePath(`/outbounds/${outbound.id}`);
+    revalidatePath(`/prospects/${outbound.prospect_id}`);
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function addSuppressedContactAction(
+  input: z.infer<typeof suppressedContactCreateSchema>,
+): Promise<ActionResult> {
+  const parsed = suppressedContactCreateSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await addSuppressedContact(supabase, parsed.data);
+    revalidatePath("/outbounds");
+    revalidatePath("/outbounds/suppressed");
+    revalidatePath("/dashboard");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+export async function removeSuppressedContactAction(
+  suppressedId: string,
+): Promise<ActionResult> {
+  const parsed = uuidSchema.safeParse(suppressedId);
+  if (!parsed.success) return { ok: false, error: "Invalid suppression id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await removeSuppressedContact(supabase, parsed.data);
+    revalidatePath("/outbounds");
+    revalidatePath("/outbounds/suppressed");
+    revalidatePath("/dashboard");
     return { ok: true };
   } catch (error) {
     return fail(error);

@@ -7,6 +7,7 @@ import {
   listJobs,
 } from "@/lib/services/jobs";
 import { getDefaultProfile } from "@/lib/services/settings";
+import { getOutreachDashboardMetrics } from "@/lib/services/outreachMetrics";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/common/Button";
 import { JobCard } from "@/components/jobs/JobCard";
@@ -18,11 +19,12 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [stats, applyNow, review, profile] = await Promise.all([
+  const [stats, applyNow, review, profile, outreach] = await Promise.all([
     getDashboardStats(supabase),
     listJobs(supabase, { status: "apply", limit: 6 }),
     listJobs(supabase, { status: "review", limit: 6 }),
     getDefaultProfile(supabase),
+    getOutreachDashboardMetrics(supabase),
   ]);
 
   const now = new Date();
@@ -66,6 +68,42 @@ export default async function DashboardPage() {
           <div>
             <p className={styles.stripValue}>{stats.skipToday}</p>
             <p className={styles.stripLabel}>Skipped today</p>
+          </div>
+        </div>
+      </section>
+
+      <section className={styles.section} aria-label="Outreach overview">
+        <div className={styles.sectionHeader}>
+          <h2 className={styles.sectionTitle}>Outreach</h2>
+          <Link href="/outbounds" className={styles.sectionLink}>
+            Open outreach
+            <ArrowRight className={styles.sectionLinkIcon} aria-hidden />
+          </Link>
+        </div>
+        <div className={styles.outreachGrid}>
+          <div className={styles.outreachCell}>
+            <p className={styles.outreachValue}>{outreach.inProgress}</p>
+            <p className={styles.outreachLabel}>In progress</p>
+          </div>
+          <div className={styles.outreachCell}>
+            <p className={styles.outreachValue}>{outreach.awaitingFollowUp}</p>
+            <p className={styles.outreachLabel}>Awaiting follow-up</p>
+          </div>
+          <div className={styles.outreachCell}>
+            <p className={styles.outreachValue}>{outreach.replied}</p>
+            <p className={styles.outreachLabel}>Replied</p>
+          </div>
+          <div className={styles.outreachCell}>
+            <p className={styles.outreachValue}>{outreach.replyRate}%</p>
+            <p className={styles.outreachLabel}>Reply rate</p>
+          </div>
+          <div className={styles.outreachCell}>
+            <p className={styles.outreachValue}>{outreach.suppressed}</p>
+            <p className={styles.outreachLabel}>Blocked</p>
+          </div>
+          <div className={styles.outreachCell}>
+            <p className={styles.outreachValue}>{outreach.completed}</p>
+            <p className={styles.outreachLabel}>Completed</p>
           </div>
         </div>
       </section>

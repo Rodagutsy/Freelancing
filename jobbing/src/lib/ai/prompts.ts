@@ -1,5 +1,6 @@
 import type {
   JobRow,
+  OutboundStep,
   PortfolioProjectRow,
   ProfileRow,
   RegenerateInstruction,
@@ -118,6 +119,99 @@ Score this job honestly. Return STRICT JSON.`;
   return { system: SCORING_SYSTEM, user };
 }
 
+const OUTBOUND_DRAFT_SYSTEM = `You write personalized cold-outreach email sequences for an automation consultant who researches a business before reaching out.
+
+The sequence follows a strict 5-email arc:
+1. Observation — a specific, evidence-based observation about the prospect's website/process. Create a curiosity gap. No pitch yet.
+2. Problem expansion — why the observation matters when several such enquiries/cases arrive at once.
+3. Proof / demo — mention a small system the consultant built around this exact problem. Never invent results, numbers, metrics, or client names.
+4. Simple CTA — one low-friction next step (e.g. "want me to send a short example?" or a quick conversational question).
+5. Breakup — close the loop politely and leave the door open.
+
+Hard rules:
+- Base every claim ONLY on the AUDIT CONTEXT provided. Never invent findings, business processes, technologies, metrics, or results.
+- Do not lead with "I'm an automation consultant who sells X". The prospect is the story.
+- Write like a peer, not a sales template. Never output placeholder tokens like [Company] or [Name]; refer to "your" company/process, and use the contact's first name when provided (otherwise "Hi there,").
+- Subject lines should be short and specific, and steps 2-5 reuse the thread ("Re: …") naturally.
+- Each email must stand alone (subject + body) and stay under 150 words.
+- Set day_offset as: first email 0, then 3, 6, 10, 14.
+
+Return STRICT JSON only, with exactly this shape:
+{"personalization_angle": string, "steps": [{"order": int, "day_offset": int, "subject": string, "body": string}]}`;
+
+/** Context for the outbound draft prompt (audit evidence + prospect). */
+export interface OutboundDraftPromptInput {
+  prospect: {
+    company_name: string;
+    contact_name: string | null;
+    industry: string | null;
+    location: string | null;
+  };
+  auditContext: string | null;
+  technologies: string;
+  issues: string;
+  opportunities: string;
+  existingSteps?: OutboundStep[];
+  instruction?: string;
+}
+
+function formatDraftStepsForPrompt(steps: OutboundStep[]): string {
+  return steps
+    .map(
+      (s) =>
+        `[${s.order}] (day ${s.day_offset})\nSubject: ${s.subject}\nBody:\n${s.body}`,
+    )
+    .join("\n\n");
+}
+
+export function buildOutboundDraftMessages(
+  input: OutboundDraftPromptInput,
+): { system: string; user: string } {
+  const prospectLines = [
+    `- Company: ${input.prospect.company_name}`,
+    `- Contact: ${input.prospect.contact_name ?? "not known"}`,
+    `- Industry: ${input.prospect.industry ?? "not specified"}`,
+    `- Location: ${input.prospect.location ?? "not specified"}`,
+  ].join("\n");
+
+  if (input.existingSteps && input.existingSteps.length > 0) {
+    const user = `REVISION TASK.
+
+PROSPECT:
+${prospectLines}
+
+CURRENT DRAFT SEQUENCE (emails 1-5):
+${formatDraftStepsForPrompt(input.existingSteps)}
+
+Revise the sequence according to this instruction, keeping everything evidence-based and consistent with the arc:
+"${input.instruction ?? "Improve the drafts."}"
+
+Return the FULL updated sequence as STRICT JSON (5 emails). Keep orders 1-5 and the day offsets.`;
+
+    return { system: OUTBOUND_DRAFT_SYSTEM, user };
+  }
+
+  const user = `PROSPECT:
+${prospectLines}
+
+AUDIT CONTEXT:
+${input.auditContext ?? "No completed audit; base claims on the general process observations below."}
+
+TECHNOLOGY STACK:
+${input.technologies || "Not fully detected"}
+
+OBSERVED ISSUES (evidence only):
+${input.issues || "No issues on file"}
+
+TOP OPPORTUNITIES (potential angles):
+${input.opportunities || "No opportunities on file"}
+${input.instruction ? `\nUser instruction for this draft: ${input.instruction}` : ""}
+
+Write the 5-email sequence now. Return STRICT JSON.`;
+
+  return { system: OUTBOUND_DRAFT_SYSTEM, user };
+}
+
 export function buildProposalMessages(
   input: BuildProposalInput,
 ): { system: string; user: string } {
@@ -154,4 +248,58 @@ ${formatProjects(projects) || "no portfolio projects added yet"}
 Write the proposal now. Return STRICT JSON.${instructionLine}`;
 
   return { system: PROPOSAL_SYSTEM, user };
+}
+
+const REPLY_CLASSIFIER_SYSTEM = `You classify an inbound email reply for an automation consultant who is in the middle of a cold-outreach sequence with a prospect who has no prior relationship.
+
+Classify the intent exactly one of:
+- interested: a positive signal — wants to explore, asks about the consultant's work, accepts the offer of an example, or suggests a call
+- question: a neutral clarifying question about the consultant or their approach (neither clearly positive nor negative; a bare "thanks" with no interest signal is question, not interested)
+- not_interested: clearly declining or irrelevant
+- wrong_person: the recipient's role is not a fit even though the message is polite
+- unsubscribe: asks to stop contact, remove them from the list, "please remove", unsubscribes, or makes a GDPR-style request
+
+Hard rules:
+- Base ONLY on the reply text below. Never over-read generic pleasantries.
+- A short generic "thanks, will keep you in mind" is not_interested; a bare "thanks" is question.
+- Any "remove/stop emailing/unsubscribe/please delete my data" → unsubscribe.
+- For unsubscribe, not_interested, and wrong_person return suggested_reply: null.
+
+Return STRICT JSON only:
+{"classification": "interested"|"question"|"not_interested"|"wrong_person"|"unsubscribe", "reason": string, "suggested_reply": string|null}`;
+
+/** Inbound reply to classify, with the sequence steps for context. */
+export interface ReplyClassificationPromptInput {
+  from: string;
+  subject: string | null;
+  body: string;
+  contactName: string | null;
+  companyName: string;
+  steps: OutboundStep[];
+}
+
+export function buildReplyClassificationMessages(
+  input: ReplyClassificationPromptInput,
+): { system: string; user: string } {
+  const sequence = input.steps
+    .map(
+      (s) =>
+        `[${s.order}] (${s.subject})\n${s.body.slice(0, 600)}`,
+    )
+    .join("\n\n");
+
+  const user = `OUTREACH SEQUENCE SENT:
+${sequence || "(none recorded)"}
+
+INBOUND REPLY:
+- From: ${input.from}
+- Contact: ${input.contactName ?? "unknown"}
+- Company: ${input.companyName}
+- Subject: ${input.subject ?? "(none)"}
+- Body:
+${input.body}
+
+Classify the reply. Return STRICT JSON.`;
+
+  return { system: REPLY_CLASSIFIER_SYSTEM, user };
 }

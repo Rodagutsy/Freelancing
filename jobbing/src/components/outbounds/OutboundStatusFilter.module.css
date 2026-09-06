@@ -1,0 +1,14 @@
+.select {
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--gold-400);
+}

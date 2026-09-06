@@ -1,0 +1,69 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.reviseForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.reviseLabel {
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.reviseRow {
+  display: flex;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.reviseInput {
+  flex: 1;
+  min-height: 44px;
+  padding: 0 var(--space-3);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.reviseInput:focus {
+  outline: none;
+  border-color: var(--gold-400);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.noteWrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.noteInput {
+  padding: var(--space-3);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-primary);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+}
+
+.noteInput:focus {
+  outline: none;
+  border-color: var(--gold-400);
+}
