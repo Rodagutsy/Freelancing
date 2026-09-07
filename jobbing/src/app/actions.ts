@@ -94,52 +94,68 @@ export async function signInWithEmail(
   email: string,
   password: string,
 ): Promise<ActionResult> {
-  const parsedEmail = z.string().trim().email().safeParse(email);
-  if (!parsedEmail.success) {
-    return { ok: false, error: "Enter a valid email address." };
-  }
-  const parsedPassword = z.string().min(1, "Password is required").safeParse(password);
-  if (!parsedPassword.success) {
-    return { ok: false, error: "Enter your password." };
-  }
+  try {
+    const parsedEmail = z.string().trim().email().safeParse(email);
+    if (!parsedEmail.success) {
+      return { ok: false, error: "Enter a valid email address." };
+    }
+    const parsedPassword = z.string().min(1, "Password is required").safeParse(password);
+    if (!parsedPassword.success) {
+      return { ok: false, error: "Enter your password." };
+    }
 
-  const supabase = await createClient();
+    const supabase = await createClient();
 
-  const { error } = await supabase.auth.signInWithPassword({
-    email: parsedEmail.data,
-    password: parsedPassword.data,
-  });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: parsedEmail.data,
+      password: parsedPassword.data,
+    });
 
-  if (error) {
-    return { ok: false, error: "Invalid email or password." };
+    if (error) {
+      return { ok: false, error: "Invalid email or password." };
+    }
+    return { ok: true };
+  } catch {
+    return {
+      ok: false,
+      error:
+        "Sign-in failed. Check that the Supabase URL and anon key are configured.",
+    };
   }
-  return { ok: true };
 }
 
 export async function signUpWithEmail(
   email: string,
   password: string,
 ): Promise<ActionResult> {
-  const parsedEmail = z.string().trim().email().safeParse(email);
-  if (!parsedEmail.success) {
-    return { ok: false, error: "Enter a valid email address." };
-  }
-  const parsedPassword = z.string().min(6, "Password must be at least 6 characters").safeParse(password);
-  if (!parsedPassword.success) {
-    return { ok: false, error: parsedPassword.error.issues[0].message };
-  }
+  try {
+    const parsedEmail = z.string().trim().email().safeParse(email);
+    if (!parsedEmail.success) {
+      return { ok: false, error: "Enter a valid email address." };
+    }
+    const parsedPassword = z.string().min(6, "Password must be at least 6 characters").safeParse(password);
+    if (!parsedPassword.success) {
+      return { ok: false, error: parsedPassword.error.issues[0].message };
+    }
 
-  const supabase = await createClient();
+    const supabase = await createClient();
 
-  const { error } = await supabase.auth.signUp({
-    email: parsedEmail.data,
-    password: parsedPassword.data,
-  });
+    const { error } = await supabase.auth.signUp({
+      email: parsedEmail.data,
+      password: parsedPassword.data,
+    });
 
-  if (error) {
-    return { ok: false, error: error.message };
+    if (error) {
+      return { ok: false, error: error.message };
+    }
+    return { ok: true };
+  } catch {
+    return {
+      ok: false,
+      error:
+        "Sign-up failed. Check that the Supabase URL and anon key are configured.",
+    };
   }
-  return { ok: true };
 }
 
 export async function signOut(): Promise<void> {
