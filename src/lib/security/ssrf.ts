@@ -36,6 +36,10 @@ const PRIVATE_IPV4_PREFIXES: { base: number[]; mask: number }[] = [
   { base: [100, 64, 0, 0], mask: 10 },
 ];
 
+function toIpv4Int(parts: number[]): number {
+  return ((parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3]) >>> 0;
+}
+
 function isPrivateIPv4(address: string): boolean {
   const octets = address.split(".").map(Number);
   if (octets.length !== 4 || octets.some((o) => Number.isNaN(o))) {
@@ -43,10 +47,10 @@ function isPrivateIPv4(address: string): boolean {
   }
   if (octets[0] === 0) return true;
   if (octets[0] >= 224) return true; // multicast + reserved
+  const ip = toIpv4Int(octets);
   return PRIVATE_IPV4_PREFIXES.some(({ base, mask }) => {
-    const maskBits = 32 - mask;
-    const shift = (idx: number) => (octets[idx] ^ base[idx]) << (8 * (3 - idx));
-    return ((shift(0) | shift(1) | shift(2)) & ((1 << maskBits) - 1)) === 0;
+    const maskInt = ((0xffffffff << (32 - mask)) & 0xffffffff) >>> 0;
+    return (ip & maskInt) === (toIpv4Int(base) & maskInt);
   });
 }
 
