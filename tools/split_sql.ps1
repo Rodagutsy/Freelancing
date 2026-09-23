@@ -2,7 +2,7 @@
 # Each part contains ~50 INSERT statements (~500 rows each)
 
 param(
-    [string]$InputFile = "C:\Users\USER\Desktop\Automation\Upwork\jobbing\supabase\09_seed_ats_companies.sql",
+    [string]$InputFile = "C:\Users\USER\Desktop\Automation\Upwork\supabase\09_seed_ats_companies.sql",
     [int]$InsertsPerChunk = 20
 )
 

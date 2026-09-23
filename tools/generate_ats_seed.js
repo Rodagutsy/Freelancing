@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const CSV_PATH = String.raw`C:\Users\USER\.local\share\opencode\tool-output\tool_03e7476be001i8Ou80jt2fWODL`;
-const OUTPUT_PATH = String.raw`C:\Users\USER\Desktop\Automation\Upwork\jobbing\supabase\09_seed_ats_companies.sql`;
+const OUTPUT_PATH = String.raw`C:\Users\USER\Desktop\Automation\Upwork\supabase\09_seed_ats_companies.sql`;
 const BATCH_SIZE = 50;
 
 const PLATFORM_MAP = {
