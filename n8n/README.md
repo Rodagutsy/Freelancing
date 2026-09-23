@@ -24,6 +24,7 @@ from the Next.js server). This keeps AI costs tied to your actions.
 | `05_ats_intake.json` | Poll watched company ATS boards, filter by 4-pillar keywords, upsert jobs, hand off to scoring | Cron every 12 hours |
 | `10_audit_pipeline.json` | Website audit: page discovery, crawling, technology detection, AI issue analysis, scoring, opportunity detection | Webhook POST `/audit` |
 | `11_audit_pitch.json` | Generate personalized outreach pitch from audit findings and selected opportunities | Webhook POST `/audit/pitch` |
+| `12_outbound_send.json` | Send approved outbound emails via Gmail, then report delivery back to the dashboard | Webhook POST `/outbound-send` |
 
 ## Import
 
@@ -63,9 +64,12 @@ Set these in the n8n process env (e.g. `n8n.env` / Docker `environment`):
 |---|---|
 | `SUPABASE_URL` | `https://<project-ref>.supabase.co` |
 | `SUPABASE_SERVICE_ROLE_KEY` | Service role key from Supabase → Settings → API. **Never expose this to the browser.** |
+| `OWNER_USER_ID` | `auth.users.id` of the owner automation user. Required — service-role inserts bypass RLS and must stamp every row with `user_id` (17_multi_user_rls.sql). Find it: `select id from auth.users limit 1`. |
 | `DEEPSEEK_API_KEY` | DeepSeek console API key |
+| `N8N_WEBHOOK_SECRET` | Shared secret for the incoming webhooks. Must match the **Header Auth (Bearer)** credential attached to the audit/outbound webhook listeners and the app's `N8N_WEBHOOK_SECRET`. |
 | `RADAR_EMAIL` | Email address the digest + instant alerts are sent to |
 | `RADAR_DASHBOARD_URL` | (optional) Deployed dashboard URL used in the digest footer |
+| `NEXT_PUBLIC_APP_URL` | Public dashboard URL. Used by `12_outbound_send.json` to call back `/api/outbounds/report`. |
 
 ## Website Auditor (10_audit_pipeline.json)
 
@@ -105,7 +109,9 @@ DeepSeek to generate a personalized outreach pitch with subject line and key tal
 - Then `supabase/00_extensions.sql` (adds `skipped_at`, `skip_reason`, unique `jobs.url` index).
 - Then `supabase/01_rls_policies.sql` and `supabase/02_views.sql`.
 - Run `supabase/03_seed.sql` so a profile row exists (scoring fails without it).
-- n8n writes via the **service role** key, which bypasses RLS. RLS still protects the dashboard's authenticated reads.
+- **Then `supabase/17_multi_user_rls.sql`** (adds `user_id` isolation; run AFTER the first auth user exists so the backfill has an owner).
+- **Then `supabase/18_rate_limits.sql`** (server-side rate limiting table).
+- n8n writes via the **service role** key, which bypasses RLS. After 17, every n8n insert must pass `user_id` explicitly — the workflows use `$env.OWNER_USER_ID`, so set that env var. RLS still protects the dashboard's authenticated reads and scopes every row to its owner.
 
 ## Getting jobs faster (latency)
 

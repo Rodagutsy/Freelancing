@@ -7,6 +7,7 @@
 
 import type { DatabaseClient } from "@/lib/types";
 import { assertSafeUrl } from "@/lib/schemas/audit";
+import { safeFetchFromUntrustedUrl } from "@/lib/security/ssrf";
 
 export type LinkImportKind = "project" | "profile";
 
@@ -83,22 +84,16 @@ async function fetchPage(url: string): Promise<string> {
   if (!assertSafeUrl(url)) {
     throw new Error("This URL is not publicly accessible.");
   }
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      headers: BROWSER_HEADERS,
-      cache: "no-store",
-      redirect: "follow",
-    });
-  } catch {
-    throw new Error("Could not reach that site.");
-  }
-  if (!response.ok) {
+  const result = await safeFetchFromUntrustedUrl(url, {
+    headers: BROWSER_HEADERS,
+    maxBytes: 1_000_000,
+  });
+  if (!result.ok) {
     throw new Error(
-      `That site returned ${response.status}. Many sites block automated reads — fill in the details manually.`,
+      `That site returned ${result.status}. Many sites block automated reads — fill in the details manually.`,
     );
   }
-  const html = await response.text();
+  const html = result.body.toString("utf8");
   if (!html || html.length < 300) {
     throw new Error("That page came back empty.");
   }
@@ -315,15 +310,16 @@ export async function downloadAndStoreImage(
   if (!assertSafeUrl(imageUrl)) {
     throw new Error("Image URL is not publicly accessible.");
   }
-  const response = await fetch(imageUrl, {
+  const result = await safeFetchFromUntrustedUrl(imageUrl, {
     headers: BROWSER_HEADERS,
-    cache: "no-store",
+    timeoutMs: 10_000,
+    maxBytes: MAX_IMAGE_BYTES,
   });
-  if (!response.ok) {
-    throw new Error(`Image host returned ${response.status}.`);
+  if (!result.ok) {
+    throw new Error(`Image host returned ${result.status}.`);
   }
 
-  const contentType = (response.headers.get("content-type") ?? "")
+  const contentType = (result.headers.get("content-type") ?? "")
     .split(";")[0]
     .trim()
     .toLowerCase();
@@ -332,11 +328,11 @@ export async function downloadAndStoreImage(
     throw new Error("Unsupported image type.");
   }
 
-  const buffer = await response.arrayBuffer();
-  if (buffer.byteLength === 0) {
+  const buffer = result.body;
+  if (buffer.length === 0) {
     throw new Error("Empty image.");
   }
-  if (buffer.byteLength > MAX_IMAGE_BYTES) {
+  if (buffer.length > MAX_IMAGE_BYTES) {
     throw new Error("Image is larger than 5 MB.");
   }
 

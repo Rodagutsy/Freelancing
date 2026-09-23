@@ -1,0 +1,18 @@
+.icon {
+  width: 16px;
+  height: 16px;
+}
+
+.destructiveBtn {
+  color: var(--danger);
+}
+
+.linkBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.small {
+  font-size: var(--text-body-sm);
+}

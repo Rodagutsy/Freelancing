@@ -10,13 +10,19 @@ import {
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getProspect, getProspectAudits } from "@/lib/services/prospects";
-import { getAudit } from "@/lib/services/audits";
+import { getAudit, listAudits } from "@/lib/services/audits";
 import { getProspectOutbound } from "@/lib/services/outreach";
 import { formatRelative } from "@/lib/utils";
 import { OUTBOUND_STATUS_META } from "@/lib/constants";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { DraftOutreachButton } from "@/components/outbounds/DraftOutreachButton";
+import {
+  ProspectEditButton,
+  ProspectDeleteButton,
+  LinkAuditButton,
+} from "@/components/prospects/ProspectButtons";
+import { ProspectAuditActions } from "@/components/prospects/ProspectAuditActions";
 import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
@@ -72,6 +78,15 @@ export default async function ProspectDetailPage({
     }),
   );
 
+  const allAudits = await listAudits(supabase, { limit: 50 });
+  const linkedIds = new Set(auditLinks.map((link) => link.audit_id));
+  const availableAudits = allAudits.items
+    .filter((audit) => !linkedIds.has(audit.id))
+    .map((audit) => ({
+      id: audit.id,
+      label: audit.business_name ?? audit.url,
+    }));
+
   const outbound = await getProspectOutbound(supabase, prospect.id);
   const outboundMeta = outbound ? OUTBOUND_STATUS_META[outbound.status] : null;
   const canDraft =
@@ -84,7 +99,15 @@ export default async function ProspectDetailPage({
         title={prospect.company_name}
         description={prospect.industry ?? undefined}
         action={
-          <StatusBadge label={pipeline.label} tone={pipeline.tone} />
+          <div className={styles.actions}>
+            <StatusBadge label={pipeline.label} tone={pipeline.tone} />
+            <LinkAuditButton
+              prospectId={prospect.id}
+              availableAudits={availableAudits}
+            />
+            <ProspectEditButton prospect={prospect} />
+            <ProspectDeleteButton prospectId={prospect.id} />
+          </div>
         }
       >
         <div className={styles.headerMeta}>
@@ -168,19 +191,25 @@ export default async function ProspectDetailPage({
             {audits.map((item) => {
               if (!item.audit) return null;
               return (
-                <a
+                <ProspectAuditActions
                   key={item.audit_id}
-                  href={`/audits/${item.audit_id}`}
-                  className={styles.auditLink}
+                  prospectId={prospect.id}
+                  auditId={item.audit_id}
+                  isPrimary={item.is_primary}
                 >
-                  <span className={styles.auditName}>
-                    {item.audit.business_name ?? item.audit.url}
-                  </span>
-                  <StatusBadge
-                    label={item.is_primary ? "Primary" : "Linked"}
-                    tone={item.is_primary ? "success" : "muted"}
-                  />
-                </a>
+                  <a
+                    href={`/audits/${item.audit_id}`}
+                    className={styles.auditLink}
+                  >
+                    <span className={styles.auditName}>
+                      {item.audit.business_name ?? item.audit.url}
+                    </span>
+                    <StatusBadge
+                      label={item.is_primary ? "Primary" : "Linked"}
+                      tone={item.is_primary ? "success" : "muted"}
+                    />
+                  </a>
+                </ProspectAuditActions>
               );
             })}
           </div>

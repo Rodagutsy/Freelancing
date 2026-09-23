@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listProspects, getProspectStats } from "@/lib/services/prospects";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { ProspectCard } from "@/components/prospects/ProspectCard";
+import { ProspectAddButton } from "@/components/prospects/ProspectButtons";
 import { EmptyState } from "@/components/common/EmptyState";
 import styles from "./page.module.css";
 
@@ -48,6 +49,7 @@ export default async function ProspectsPage({
       <PageHeader
         title="Prospects"
         description="Track businesses you're targeting. Link audits to build evidence-based pitches."
+        action={<ProspectAddButton />}
       />
 
       <div className={styles.toolbar}>

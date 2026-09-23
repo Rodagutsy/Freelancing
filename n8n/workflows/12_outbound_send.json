@@ -1,0 +1,168 @@
+{
+  "name": "12 - Outbound Send (Gmail)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "outbound-send",
+        "responseMode": "responseNode",
+        "authentication": "headerAuth",
+        "options": {}
+      },
+      "id": "d0001111-2222-3333-4444-555566669001",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 0],
+      "notes": "Receives the app's delivery request (sendOutboundAction / sendNextFollowUpAction) via N8N_OUTBOUND_WEBHOOK_URL. Body: { outbound_id, message_id, step_no, subject, body, to, contact_name, company_name [, follow_up] }. Requires Authorization header matching N8N_WEBHOOK_SECRET.",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "outbound-webhook-auth",
+          "name": "Outbound Webhook Auth"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{JSON.stringify({ status: 'queued', outbound_id: $json.body.outbound_id, message_id: $json.body.message_id })}}"
+      },
+      "id": "d0001111-2222-3333-4444-555566669002",
+      "name": "Respond Immediately",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [280, 0],
+      "notes": "Acknowledge the request right away so the app UI isn't blocked waiting on Gmail. The send + report continue on the main branch."
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose"
+          },
+          "conditions": [
+            {
+              "id": "d0001111-2222-3333-4444-5555666690a1",
+              "leftValue": "={{$json.to}}",
+              "operator": {
+                "type": "string",
+                "operation": "notEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d0001111-2222-3333-4444-555566669003",
+      "name": "Has Recipient",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [560, 0],
+      "notes": "If the prospect has no contact email the item stays in the queue (no report) so you can add an email on the dashboard and retry from the outbound detail page."
+    },
+    {
+      "parameters": {
+        "operation": "send",
+        "options": {
+          "senderType": "me"
+        },
+        "message": {
+          "to": "={{$json.to}}",
+          "subject": "={{$json.subject}}",
+          "emailType": "text",
+          "message": "={{$json.body}}"
+        }
+      },
+      "id": "d0001111-2222-3333-4444-555566669004",
+      "name": "Send Email",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.1,
+      "position": [840, 0],
+      "notes": "Reuse the same Gmail OAuth2 credential as the intake trigger / digest. Sends from the account you connect here. Body is plain text to keep signatures/senders identical to n8n's other email nodes."
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.NEXT_PUBLIC_APP_URL}}/api/outbounds/report",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.N8N_WEBHOOK_SECRET}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify({ messageId: $json.message_id, status: 'sent', provider: 'gmail', providerMessageId: $json.id })}}",
+        "options": {}
+      },
+      "id": "d0001111-2222-3333-4444-555566669005",
+      "name": "Report Sent",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 0],
+      "notes": "Callback to the app so the message is marked sent and the campaign advances. NEXT_PUBLIC_APP_URL must be reachable from n8n and N8N_WEBHOOK_SECRET must match the app's env."
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Respond Immediately",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Respond Immediately": {
+      "main": [
+        [
+          {
+            "node": "Has Recipient",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Has Recipient": {
+      "main": [
+        [
+          {
+            "node": "Send Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Email": {
+      "main": [
+        [
+          {
+            "node": "Report Sent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false,
+  "meta": {
+    "templateCredsSetupCompleted": false
+  }
+}

@@ -8,6 +8,13 @@
   color: var(--text-muted);
 }
 
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
 .headerMetaItem {
   display: inline-flex;
   align-items: center;

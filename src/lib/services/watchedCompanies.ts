@@ -4,6 +4,7 @@ import type {
   WatchedCompanyRow,
 } from "@/lib/types";
 import { assertSafeUrl } from "@/lib/schemas/audit";
+import { safeFetchFromUntrustedUrl } from "@/lib/security/ssrf";
 
 /** Supported ATS platforms and their URL patterns for detection. */
 const ATS_PATTERNS: Array<{
@@ -46,12 +47,12 @@ export async function detectAts(url: string): Promise<DetectAtsResult> {
 
   let verified = false;
   try {
-    const resp = await fetch(origin, {
+    const result = await safeFetchFromUntrustedUrl(origin, {
       method: "HEAD",
-      redirect: "follow",
-      signal: AbortSignal.timeout(10_000),
+      timeoutMs: 10_000,
+      maxBytes: 4_096,
     });
-    verified = resp.ok;
+    verified = result.ok;
   } catch {
     verified = false;
   }

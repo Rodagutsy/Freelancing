@@ -1,134 +1,136 @@
-{
-  "name": "04 - Daily Digest (notifications)",
-  "nodes": [
-    {
-      "parameters": {
-        "rule": {
-          "interval": [
-            {
-              "field": "cronExpression",
-              "expression": "0 8 * * *"
-            }
-          ]
-        }
-      },
-      "id": "5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
-      "name": "Daily at 08:00",
-      "type": "n8n-nodes-base.scheduleTrigger",
-      "typeVersion": 1.2,
-      "position": [
-        0,
-        0
-      ],
-      "notes": "Adjust the cron expression to your preferred digest time. n8n uses the server timezone."
-    },
-    {
-      "parameters": {
-        "method": "GET",
-        "url": "={{$env.SUPABASE_URL}}/rest/v1/job_feed?select=title,url,score_total,recommendation,description,budget_min,budget_max,budget_type,posted_at&score_total=gte.7&ingested_at=gte.{{DateTime.now().minus({days: 1}).toISO()}}&skipped_at=is.null&order=score_total.desc&limit=20",
-        "sendHeaders": true,
-        "headerParameters": {
-          "parameters": [
-            {
-              "name": "apikey",
-              "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
-            },
-            {
-              "name": "Authorization",
-              "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
-            }
-          ]
-        },
-        "options": {}
-      },
-      "id": "6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
-      "name": "Load Digest Jobs",
-      "type": "n8n-nodes-base.httpRequest",
-      "typeVersion": 4.2,
-      "position": [
-        280,
-        0
-      ],
-      "notes": "Reads the job_feed view: jobs scored >= 7, ingested in the last 24h, not skipped."
-    },
-    {
-      "parameters": {
-        "mode": "runOnceForAllItems",
-        "jsCode": "const rows = $input.all();\nconst items = rows.map(function (item) {\n  const j = item.json;\n  const budget = j.budget_type ? '$' + (j.budget_min ?? '?') + '-' + '$' + (j.budget_max ?? '?') + ' ' + j.budget_type : '';\n  return '<li style=\"margin-bottom:16px\">' +\n    '<strong>' + (j.title || 'Untitled') + '</strong> &mdash; score <strong>' + j.score_total + '</strong> (' + j.recommendation + ')' +\n    (budget ? ' | ' + budget : '') +\n    '<br>' + ((j.description || '').slice(0, 200)) +\n    '<br><a href=\"' + j.url + '\">Open on Upwork</a></li>';\n}).join('');\nconst count = rows.length;\nconst html = '<h2>Upwork Radar &mdash; Daily Digest</h2>' +\n  '<p>' + count + ' high-fit job(s) in the last 24h:</p>' +\n  '<ol>' + items + '</ol>' +\n  '<p><a href=\"' + (process.env.RADAR_DASHBOARD_URL || '') + '\">Open your radar dashboard</a></p>';\nreturn { html, count };"
-      },
-      "id": "7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
-      "name": "Build Digest HTML",
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        560,
-        0
-      ]
-    },
-    {
-      "parameters": {
-        "operation": "send",
-        "options": {
-          "senderType": "me"
-        },
-        "message": {
-          "to": "={{$env.RADAR_EMAIL}}",
-          "subject": "=Upwork Radar digest: {{$json.count}} high-fit job(s)",
-          "emailType": "html",
-          "message": "={{$json.html}}"
-        }
-      },
-      "id": "8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
-      "name": "Send Digest (Gmail)",
-      "type": "n8n-nodes-base.gmail",
-      "typeVersion": 2.1,
-      "position": [
-        840,
-        0
-      ],
-      "notes": "Reuse the same Gmail OAuth2 credential as the intake trigger."
-    }
-  ],
-  "connections": {
-    "Daily at 08:00": {
-      "main": [
-        [
-          {
-            "node": "Load Digest Jobs",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Load Digest Jobs": {
-      "main": [
-        [
-          {
-            "node": "Build Digest HTML",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    },
-    "Build Digest HTML": {
-      "main": [
-        [
-          {
-            "node": "Send Digest (Gmail)",
-            "type": "main",
-            "index": 0
-          }
-        ]
-      ]
-    }
-  },
-  "settings": {
-    "executionOrder": "v1"
-  },
-  "active": false,
-  "meta": {
-    "templateCredsSetupCompleted": false
-  }
+﻿{
+    "name":  "04 - Daily Digest (notifications)",
+    "nodes":  [
+                  {
+                      "parameters":  {
+                                         "rule":  {
+                                                      "interval":  [
+                                                                       {
+                                                                           "field":  "cronExpression",
+                                                                           "expression":  "0 8 * * *"
+                                                                       }
+                                                                   ]
+                                                  }
+                                     },
+                      "id":  "5e6f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
+                      "name":  "Daily at 08:00",
+                      "type":  "n8n-nodes-base.scheduleTrigger",
+                      "typeVersion":  1.2,
+                      "position":  [
+                                       0,
+                                       0
+                                   ],
+                      "notes":  "Adjust the cron expression to your preferred digest time. n8n uses the server timezone."
+                  },
+                  {
+                      "parameters":  {
+                                         "method":  "GET",
+                                         "url":  "={{$env.SUPABASE_URL}}/rest/v1/job_feed?select=title,url,score_total,recommendation,description,budget_min,budget_max,budget_type,posted_at\u0026user_id=eq.{{$env.OWNER_USER_ID}}\u0026score_total=gte.7\u0026ingested_at=gte.{{DateTime.now().minus({days: 1}).toISO()}}\u0026skipped_at=is.null\u0026order=score_total.desc\u0026limit=20",
+                                         "sendHeaders":  true,
+                                         "headerParameters":  {
+                                                                  "parameters":  [
+                                                                                     {
+                                                                                         "name":  "apikey",
+                                                                                         "value":  "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+                                                                                     },
+                                                                                     {
+                                                                                         "name":  "Authorization",
+                                                                                         "value":  "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+                                                                                     }
+                                                                                 ]
+                                                              },
+                                         "options":  {
+
+                                                     }
+                                     },
+                      "id":  "6f7a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
+                      "name":  "Load Digest Jobs",
+                      "type":  "n8n-nodes-base.httpRequest",
+                      "typeVersion":  4.2,
+                      "position":  [
+                                       280,
+                                       0
+                                   ],
+                      "notes":  "Reads the job_feed view: jobs scored \u003e= 7, ingested in the last 24h, not skipped."
+                  },
+                  {
+                      "parameters":  {
+                                         "mode":  "runOnceForAllItems",
+                                         "jsCode":  "const rows = $input.all();\nconst items = rows.map(function (item) {\n  const j = item.json;\n  const budget = j.budget_type ? \u0027$\u0027 + (j.budget_min ?? \u0027?\u0027) + \u0027-\u0027 + \u0027$\u0027 + (j.budget_max ?? \u0027?\u0027) + \u0027 \u0027 + j.budget_type : \u0027\u0027;\n  return \u0027\u003cli style=\"margin-bottom:16px\"\u003e\u0027 +\n    \u0027\u003cstrong\u003e\u0027 + (j.title || \u0027Untitled\u0027) + \u0027\u003c/strong\u003e \u0026mdash; score \u003cstrong\u003e\u0027 + j.score_total + \u0027\u003c/strong\u003e (\u0027 + j.recommendation + \u0027)\u0027 +\n    (budget ? \u0027 | \u0027 + budget : \u0027\u0027) +\n    \u0027\u003cbr\u003e\u0027 + ((j.description || \u0027\u0027).slice(0, 200)) +\n    \u0027\u003cbr\u003e\u003ca href=\"\u0027 + j.url + \u0027\"\u003eOpen on Upwork\u003c/a\u003e\u003c/li\u003e\u0027;\n}).join(\u0027\u0027);\nconst count = rows.length;\nconst html = \u0027\u003ch2\u003eUpwork Radar \u0026mdash; Daily Digest\u003c/h2\u003e\u0027 +\n  \u0027\u003cp\u003e\u0027 + count + \u0027 high-fit job(s) in the last 24h:\u003c/p\u003e\u0027 +\n  \u0027\u003col\u003e\u0027 + items + \u0027\u003c/ol\u003e\u0027 +\n  \u0027\u003cp\u003e\u003ca href=\"\u0027 + (process.env.RADAR_DASHBOARD_URL || \u0027\u0027) + \u0027\"\u003eOpen your radar dashboard\u003c/a\u003e\u003c/p\u003e\u0027;\nreturn { html, count };"
+                                     },
+                      "id":  "7a8b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+                      "name":  "Build Digest HTML",
+                      "type":  "n8n-nodes-base.code",
+                      "typeVersion":  2,
+                      "position":  [
+                                       560,
+                                       0
+                                   ]
+                  },
+                  {
+                      "parameters":  {
+                                         "operation":  "send",
+                                         "options":  {
+                                                         "senderType":  "me"
+                                                     },
+                                         "message":  {
+                                                         "to":  "={{$env.RADAR_EMAIL}}",
+                                                         "subject":  "=Upwork Radar digest: {{$json.count}} high-fit job(s)",
+                                                         "emailType":  "html",
+                                                         "message":  "={{$json.html}}"
+                                                     }
+                                     },
+                      "id":  "8b9c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+                      "name":  "Send Digest (Gmail)",
+                      "type":  "n8n-nodes-base.gmail",
+                      "typeVersion":  2.1,
+                      "position":  [
+                                       840,
+                                       0
+                                   ],
+                      "notes":  "Reuse the same Gmail OAuth2 credential as the intake trigger."
+                  }
+              ],
+    "connections":  {
+                        "Daily at 08:00":  {
+                                               "main":  [
+                                                            [
+                                                                {
+                                                                    "node":  "Load Digest Jobs",
+                                                                    "type":  "main",
+                                                                    "index":  0
+                                                                }
+                                                            ]
+                                                        ]
+                                           },
+                        "Load Digest Jobs":  {
+                                                 "main":  [
+                                                              [
+                                                                  {
+                                                                      "node":  "Build Digest HTML",
+                                                                      "type":  "main",
+                                                                      "index":  0
+                                                                  }
+                                                              ]
+                                                          ]
+                                             },
+                        "Build Digest HTML":  {
+                                                  "main":  [
+                                                               [
+                                                                   {
+                                                                       "node":  "Send Digest (Gmail)",
+                                                                       "type":  "main",
+                                                                       "index":  0
+                                                                   }
+                                                               ]
+                                                           ]
+                                              }
+                    },
+    "settings":  {
+                     "executionOrder":  "v1"
+                 },
+    "active":  false,
+    "meta":  {
+                 "templateCredsSetupCompleted":  false
+             }
 }

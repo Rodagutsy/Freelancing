@@ -14,6 +14,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ErrorState } from "@/components/common/ErrorState";
 import { PitchButton } from "@/components/audits/PitchButton";
+import { AuditProgressPoller } from "@/components/audits/AuditProgressPoller";
+import { DeleteAuditButton } from "@/components/audits/DeleteAuditButton";
 import styles from "./page.module.css";
 
 export const dynamic = "force-dynamic";
@@ -120,6 +122,7 @@ export default async function AuditDetailPage({
 
   return (
     <div>
+      <AuditProgressPoller status={audit.status} />
       <section className={styles.header}>
         <PageHeader
           title={audit.business_name ?? audit.url}
@@ -127,6 +130,7 @@ export default async function AuditDetailPage({
           action={
             <div className={styles.actions}>
               <StatusBadge label={status.label} tone={status.tone} />
+              <DeleteAuditButton auditId={audit.id} />
               <a
                 href={audit.url}
                 target="_blank"
@@ -317,8 +321,8 @@ export default async function AuditDetailPage({
               <div>
                 <p className={styles.issueTitle}>Audit in progress</p>
                 <p className={styles.issueDescription}>
-                  Status: {status.label}. This page will update automatically
-                  once the audit completes.
+                  Status: {status.label}. This page auto-refreshes as the audit
+                  progresses.
                 </p>
               </div>
             </div>

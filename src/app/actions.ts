@@ -68,6 +68,8 @@ import {
   outboundStepsUpdateSchema,
   suppressedContactCreateSchema,
 } from "@/lib/schemas/outreach";
+import { checkRateLimit, authRateRules, aiRateRules, type RateLimitRule } from "@/lib/security/rateLimit";
+import { postWebhook, requireWebhookConfig } from "@/lib/security/webhook";
 
 export interface ActionResult<T = undefined> {
   ok: boolean;
@@ -83,6 +85,26 @@ function fail(error: unknown): ActionResult<never> {
         ? error.message
         : "Something went wrong. Try again.";
   return { ok: false, error: message };
+}
+
+function rateLimitedError(retryAfterMs: number | null): ActionResult<never> {
+  const minutes = retryAfterMs ? Math.max(1, Math.ceil(retryAfterMs / 60_000)) : 1;
+  return { ok: false, error: `Too many attempts. Try again in ${minutes} min.` };
+}
+
+async function enforceRateLimit(
+  bucketKey: string,
+  rule: RateLimitRule,
+): Promise<ActionResult<never> | null> {
+  const result = await checkRateLimit(bucketKey, rule);
+  return result.ok ? null : rateLimitedError(result.retryAfterMs);
+}
+
+async function enforceAiRateLimit(
+  userId: string,
+  kind: keyof typeof aiRateRules,
+): Promise<ActionResult<never> | null> {
+  return enforceRateLimit(`ai:${kind}:${userId}`, aiRateRules[kind]);
 }
 
 /* ------------------------------------------------------------------ */
@@ -102,6 +124,12 @@ export async function signInWithEmail(
     if (!parsedPassword.success) {
       return { ok: false, error: "Enter your password." };
     }
+
+    const throttled = await enforceRateLimit(
+      `auth:signin:${parsedEmail.data.toLowerCase()}`,
+      authRateRules.signIn,
+    );
+    if (throttled) return throttled;
 
     const supabase = await createClient();
 
@@ -132,10 +160,16 @@ export async function signUpWithEmail(
     if (!parsedEmail.success) {
       return { ok: false, error: "Enter a valid email address." };
     }
-    const parsedPassword = z.string().min(6, "Password must be at least 6 characters").safeParse(password);
+    const parsedPassword = z.string().min(8, "Password must be at least 8 characters").safeParse(password);
     if (!parsedPassword.success) {
       return { ok: false, error: parsedPassword.error.issues[0].message };
     }
+
+    const throttled = await enforceRateLimit(
+      `auth:signup:${parsedEmail.data.toLowerCase()}`,
+      authRateRules.signUp,
+    );
+    if (throttled) return throttled;
 
     const supabase = await createClient();
 
@@ -144,8 +178,10 @@ export async function signUpWithEmail(
       password: parsedPassword.data,
     });
 
+    // Deliberately generic: do not reveal whether the address is taken or
+    // whether email confirmation is enabled (anti user-enumeration).
     if (error) {
-      return { ok: false, error: error.message };
+      return { ok: false, error: "Sign-up is unavailable for this email. Try signing in instead." };
     }
     return { ok: true };
   } catch {
@@ -414,6 +450,9 @@ export async function generateProposalAction(
   const user = await requireUser();
   if (!user) return { ok: false, error: "You must be signed in." };
 
+  const aiThrottled = await enforceAiRateLimit(user.id, "proposal");
+  if (aiThrottled) return aiThrottled;
+
   try {
     const supabase = await createClient();
     const proposal = await generateProposal(
@@ -460,6 +499,9 @@ export async function rescoreJobAction(
 
   const user = await requireUser();
   if (!user) return { ok: false, error: "You must be signed in." };
+
+  const aiThrottled = await enforceAiRateLimit(user.id, "rescore");
+  if (aiThrottled) return aiThrottled;
 
   try {
     const supabase = await createClient();
@@ -780,17 +822,17 @@ export async function startAuditAction(
     const supabase = await createClient();
     const audit = await createAudit(supabase, parsed.data);
 
-    const webhookUrl = process.env.N8N_AUDIT_WEBHOOK_URL;
-    const webhookSecret = process.env.N8N_WEBHOOK_SECRET;
-    if (webhookUrl) {
-      fetch(webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(webhookSecret ? { Authorization: `Bearer ${webhookSecret}` } : {}),
-        },
-        body: JSON.stringify({ audit_id: audit.id, url: parsed.data.url }),
-      }).catch(() => {});
+    const webhook = requireWebhookConfig("AUDIT");
+    try {
+      await postWebhook(webhook, { audit_id: audit.id, url: parsed.data.url });
+    } catch (error) {
+      // n8n unreachable — keep the audit row so it can be re-triggered later.
+      await supabase
+        .from("audits")
+        .update({
+          error_message: error instanceof Error ? error.message : "Webhook unavailable.",
+        })
+        .eq("id", audit.id);
     }
 
     revalidatePath("/audits");
@@ -838,6 +880,9 @@ export async function generatePitchAction(
 
   const user = await requireUser();
   if (!user) return { ok: false, error: "You must be signed in." };
+
+  const aiThrottled = await enforceAiRateLimit(user.id, "pitch");
+  if (aiThrottled) return aiThrottled;
 
   try {
     const supabase = await createClient();
@@ -984,6 +1029,9 @@ export async function draftOutboundAction(
   const user = await requireUser();
   if (!user) return { ok: false, error: "You must be signed in." };
 
+  const aiThrottled = await enforceAiRateLimit(user.id, "draft");
+  if (aiThrottled) return aiThrottled;
+
   try {
     const supabase = await createClient();
     const draft = await generateOutboundDraft(supabase, parsed.data);
@@ -1081,6 +1129,9 @@ export async function reviseOutboundAction(
   const user = await requireUser();
   if (!user) return { ok: false, error: "You must be signed in." };
 
+  const aiThrottled = await enforceAiRateLimit(user.id, "revise");
+  if (aiThrottled) return aiThrottled;
+
   try {
     const supabase = await createClient();
     const outbound = await getOutbound(supabase, parsedId.data);
@@ -1151,28 +1202,26 @@ export async function sendOutboundAction(
     const { outbound, message } = await queueOutboundForSend(supabase, parsed.data);
 
     const prospect = await getProspect(supabase, outbound.prospect_id);
-    const webhookUrl =
-      process.env.N8N_OUTBOUND_WEBHOOK_URL ?? process.env.N8N_AUDIT_WEBHOOK_URL;
-    const webhookSecret = process.env.N8N_WEBHOOK_SECRET;
-    if (webhookUrl && prospect) {
-      fetch(webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(webhookSecret ? { Authorization: `Bearer ${webhookSecret}` } : {}),
-        },
-        body: JSON.stringify({
-          outbound_id: outbound.id,
-          message_id: message.id,
-          step_no: message.step_no,
-          subject: message.subject,
-          body: message.body,
-          to: prospect.contact_email,
-          contact_name: prospect.contact_name,
-          company_name: prospect.company_name,
-        }),
-      }).catch(() => {});
+    const webhook = requireWebhookConfig("OUTBOUND");
+    if (!webhook.url) {
+      return {
+        ok: false,
+        error: "The outbound email webhook is not configured (N8N_OUTBOUND_WEBHOOK_URL).",
+      };
     }
+    if (!prospect) {
+      return { ok: false, error: "Prospect not found." };
+    }
+    await postWebhook(webhook, {
+      outbound_id: outbound.id,
+      message_id: message.id,
+      step_no: message.step_no,
+      subject: message.subject,
+      body: message.body,
+      to: prospect.contact_email,
+      contact_name: prospect.contact_name,
+      company_name: prospect.company_name,
+    });
 
     revalidatePath("/outbounds");
     revalidatePath(`/outbounds/${outbound.id}`);
@@ -1198,29 +1247,27 @@ export async function sendNextFollowUpAction(
     });
 
     const prospect = await getProspect(supabase, outbound.prospect_id);
-    const webhookUrl =
-      process.env.N8N_OUTBOUND_WEBHOOK_URL ?? process.env.N8N_AUDIT_WEBHOOK_URL;
-    const webhookSecret = process.env.N8N_WEBHOOK_SECRET;
-    if (webhookUrl && prospect) {
-      fetch(webhookUrl, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(webhookSecret ? { Authorization: `Bearer ${webhookSecret}` } : {}),
-        },
-        body: JSON.stringify({
-          outbound_id: outbound.id,
-          message_id: message.id,
-          step_no: message.step_no,
-          subject: message.subject,
-          body: message.body,
-          to: prospect.contact_email,
-          contact_name: prospect.contact_name,
-          company_name: prospect.company_name,
-          follow_up: true,
-        }),
-      }).catch(() => {});
+    const webhook = requireWebhookConfig("OUTBOUND");
+    if (!webhook.url) {
+      return {
+        ok: false,
+        error: "The outbound email webhook is not configured (N8N_OUTBOUND_WEBHOOK_URL).",
+      };
     }
+    if (!prospect) {
+      return { ok: false, error: "Prospect not found." };
+    }
+    await postWebhook(webhook, {
+      outbound_id: outbound.id,
+      message_id: message.id,
+      step_no: message.step_no,
+      subject: message.subject,
+      body: message.body,
+      to: prospect.contact_email,
+      contact_name: prospect.contact_name,
+      company_name: prospect.company_name,
+      follow_up: true,
+    });
 
     revalidatePath("/outbounds");
     revalidatePath(`/outbounds/${outbound.id}`);

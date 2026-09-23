@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { listAudits } from "@/lib/services/audits";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { AuditCard } from "@/components/audits/AuditCard";
+import { AuditCreateButton } from "@/components/audits/AuditCreateButton";
 import { EmptyState } from "@/components/common/EmptyState";
 import styles from "./page.module.css";
 
@@ -16,6 +17,7 @@ export default async function AuditsPage() {
       <PageHeader
         title="Website Audits"
         description="Analyze business websites for UX, performance, accessibility, SEO, and automation opportunities."
+        action={<AuditCreateButton />}
       />
 
       {audits.length > 0 ? (
