@@ -72,6 +72,35 @@ export async function deleteAudit(
   if (error) throw new Error(error.message);
 }
 
+export async function getAuditStats(
+  client: DatabaseClient,
+): Promise<{ total: number; inProgress: number; completed: number; failed: number }> {
+  const active = [
+    "created",
+    "queued",
+    "crawling",
+    "analyzing",
+    "scoring",
+    "opportunities",
+  ];
+  const [total, inProgress, completed, failed] = await Promise.all([
+    client.from("audits").select("*", { count: "exact", head: true }),
+    client.from("audits").select("*", { count: "exact", head: true }).in("status", active),
+    client
+      .from("audits")
+      .select("*", { count: "exact", head: true })
+      .eq("status", "completed"),
+    client.from("audits").select("*", { count: "exact", head: true }).eq("status", "failed"),
+  ]);
+
+  return {
+    total: total.count ?? 0,
+    inProgress: inProgress.count ?? 0,
+    completed: completed.count ?? 0,
+    failed: failed.count ?? 0,
+  };
+}
+
 /* ------------------------------------------------------------------ */
 /* Status management                                                   */
 /* ------------------------------------------------------------------ */
