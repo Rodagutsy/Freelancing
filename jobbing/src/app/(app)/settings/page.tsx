@@ -1,4 +1,4 @@
-import { Mail, Database, Workflow, Cpu, Globe } from "lucide-react";
+import { Mail, Database, Workflow, Cpu } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getProfiles } from "@/lib/services/settings";
 import { listWatchedCompanies } from "@/lib/services/watchedCompanies";

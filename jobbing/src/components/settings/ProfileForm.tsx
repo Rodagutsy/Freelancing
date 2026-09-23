@@ -311,7 +311,7 @@ export function ProfileForm({ profile }: ProfileFormProps) {
       </div>
 
       <div className={styles.linksSection}>
-        <h3 className={styles.linksTitle}>This persona's links</h3>
+        <h3 className={styles.linksTitle}>This persona&apos;s links</h3>
         <p className={styles.linksHint}>
           Proposals cite at most one of these — and only when it backs a matched
           portfolio claim. Portfolio projects themselves are shared across all

@@ -8,7 +8,6 @@ import {
   getAuditTechnologies,
   getAuditIssues,
   getAuditOpportunities,
-  getOpportunityServices,
 } from "@/lib/services/audits";
 import { formatRelative } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/PageHeader";

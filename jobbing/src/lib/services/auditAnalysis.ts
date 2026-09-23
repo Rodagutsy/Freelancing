@@ -1,7 +1,6 @@
 import type {
   AuditIssueRow,
   AuditOpportunityRow,
-  AuditOpportunityServiceRow,
   AuditPageRow,
   AuditRow,
   AuditTechnologyRow,

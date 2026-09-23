@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { errorResponse, requireApiUser } from "@/lib/api";
+import { requireApiUser } from "@/lib/api";
 import { createClient } from "@/lib/supabase/server";
 import { deleteAudit, getAudit, getAuditIssues, getAuditOpportunities, getAuditPages, getAuditTechnologies } from "@/lib/services/audits";
 import { getOpportunityServices } from "@/lib/services/audits";

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { listAudits } from "@/lib/services/audits";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -10,7 +9,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AuditsPage() {
   const supabase = await createClient();
-  const { items: audits, total } = await listAudits(supabase, { limit: 20 });
+  const { items: audits } = await listAudits(supabase, { limit: 20 });
 
   return (
     <div>
