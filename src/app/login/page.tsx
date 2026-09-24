@@ -37,7 +37,7 @@ export default function LoginPage() {
           setMode("signin");
           setPassword("");
         } else {
-          router.replace("/");
+          router.replace("/dashboard");
           return;
         }
       } else {

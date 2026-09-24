@@ -32,7 +32,7 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  const publicPaths = new Set(["/login", "/privacy", "/terms"]);
+  const publicPaths = new Set(["/", "/login", "/privacy", "/terms"]);
   const isPublic = publicPaths.has(pathname);
 
   if (!user && !isPublic) {
@@ -43,7 +43,7 @@ export async function updateSession(request: NextRequest) {
 
   if (user && pathname === "/login") {
     const url = request.nextUrl.clone();
-    url.pathname = "/";
+    url.pathname = "/dashboard";
     return NextResponse.redirect(url);
   }
 
