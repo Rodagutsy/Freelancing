@@ -27,24 +27,24 @@ describe("requireWebhookConfig", () => {
   });
 
   it("throws when a URL is set but the shared secret is missing", () => {
-    setEnv({ N8N_AUDIT_WEBHOOK_URL: "http://localhost:5678/webhook/audit", N8N_WEBHOOK_SECRET: undefined });
+    setEnv({ N8N_AUDIT_WEBHOOK_URL: "http://localhost:5678/webhook/dsqYdZQ4JcNyxPhl/webhook/audit", N8N_WEBHOOK_SECRET: undefined });
     expect(() => requireWebhookConfig("AUDIT")).toThrow(/N8N_AUDIT_WEBHOOK_URL.*N8N_WEBHOOK_SECRET/);
   });
 
   it("returns both URL and secret when fully configured", () => {
     setEnv({
-      N8N_AUDIT_WEBHOOK_URL: "http://localhost:5678/webhook/audit",
+      N8N_AUDIT_WEBHOOK_URL: "http://localhost:5678/webhook/dsqYdZQ4JcNyxPhl/webhook/audit",
       N8N_WEBHOOK_SECRET: "s3cret",
     });
     expect(requireWebhookConfig("AUDIT")).toEqual({
-      url: "http://localhost:5678/webhook/audit",
+      url: "http://localhost:5678/webhook/dsqYdZQ4JcNyxPhl/webhook/audit",
       secret: "s3cret",
     });
   });
 
   it("reads per-name variables", () => {
-    setEnv({ N8N_OUTBOUND_WEBHOOK_URL: "http://localhost:5678/webhook/outbound-send", N8N_WEBHOOK_SECRET: "x" });
-    expect(requireWebhookConfig("OUTBOUND")?.url).toBe("http://localhost:5678/webhook/outbound-send");
+    setEnv({ N8N_OUTBOUND_WEBHOOK_URL: "http://localhost:5678/webhook/1FFAA5j24PirsgCt/webhook/outbound-send", N8N_WEBHOOK_SECRET: "x" });
+    expect(requireWebhookConfig("OUTBOUND")?.url).toBe("http://localhost:5678/webhook/1FFAA5j24PirsgCt/webhook/outbound-send");
   });
 });
 

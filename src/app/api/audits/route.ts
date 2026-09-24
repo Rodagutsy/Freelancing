@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { errorResponse, requireApiUser } from "@/lib/api";
+import { postWebhook, requireWebhookConfig } from "@/lib/security/webhook";
 import { createClient } from "@/lib/supabase/server";
 import { auditCreateSchema } from "@/lib/schemas/audit";
 import { createAudit, listAudits } from "@/lib/services/audits";
@@ -29,13 +30,16 @@ export async function POST(request: Request) {
   const supabase = await createClient();
   const audit = await createAudit(supabase, parsed.data);
 
-  const webhookUrl = process.env.N8N_AUDIT_WEBHOOK_URL;
-  if (webhookUrl) {
-    fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ audit_id: audit.id, url: parsed.data.url }),
-    }).catch(() => {});
+  const webhook = requireWebhookConfig("AUDIT");
+  try {
+    await postWebhook(webhook, { audit_id: audit.id, url: parsed.data.url });
+  } catch (error) {
+    await supabase
+      .from("audits")
+      .update({
+        error_message: error instanceof Error ? error.message : "Webhook unavailable.",
+      })
+      .eq("id", audit.id);
   }
 
   return NextResponse.json(audit, { status: 201 });

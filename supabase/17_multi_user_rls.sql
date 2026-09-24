@@ -173,8 +173,13 @@ CREATE POLICY "Authenticated update audit screenshots"
 -- 6. Add user_id to the read-model views so service-role automation + the app
 --    can filter to a single owner. RLS (security_invoker) still scopes rows
 --    for authenticated callers; these columns are for n8n's owner filtering.
+--
+-- NOTE: user_id is inserted mid-column-list, so CREATE OR REPLACE VIEW would
+-- fail with 42P16 ("cannot change name of view column"). The views are dropped
+-- and recreated instead (nothing depends on them database-side).
 
-CREATE OR REPLACE VIEW job_feed AS
+DROP VIEW IF EXISTS job_feed;
+CREATE VIEW job_feed AS
 SELECT
   j.id,
   j.source,
@@ -234,7 +239,8 @@ LEFT JOIN LATERAL (
 ALTER VIEW job_feed SET (security_invoker = on);
 GRANT SELECT ON job_feed TO authenticated;
 
-CREATE OR REPLACE VIEW outbound_feed AS
+DROP VIEW IF EXISTS outbound_feed;
+CREATE VIEW outbound_feed AS
 SELECT
   o.id,
   o.prospect_id,
@@ -269,7 +275,8 @@ JOIN prospects p ON p.id = o.prospect_id;
 ALTER VIEW outbound_feed SET (security_invoker = on);
 GRANT SELECT ON outbound_feed TO authenticated;
 
-CREATE OR REPLACE VIEW outbound_message_feed AS
+DROP VIEW IF EXISTS outbound_message_feed;
+CREATE VIEW outbound_message_feed AS
 SELECT
   m.id                          AS id,
   m.outbound_id,
