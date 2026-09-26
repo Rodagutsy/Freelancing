@@ -18,7 +18,7 @@ export function SidebarNav() {
     <nav className={styles.nav} aria-label="Main navigation">
       <Link href="/dashboard" className={styles.brand}>
         <span className={styles.brandMark} aria-hidden />
-        Upwork Radar
+        Freelance-Moncha
       </Link>
 
       <ul className={styles.items}>

@@ -2,7 +2,7 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Upwork Radar",
+  title: "Freelance-Moncha",
 };
 
 const features = [
@@ -46,7 +46,7 @@ export default function LandingPage() {
               background: "var(--gold-500)",
             }}
           />
-          <strong>Upwork Radar</strong>
+          <strong>Freelance-Moncha</strong>
         </div>
         <nav style={{ display: "flex", alignItems: "center", gap: "var(--space-5)" }}>
           <Link href="/privacy" style={{ color: "var(--text-secondary)" }}>
@@ -86,7 +86,7 @@ export default function LandingPage() {
             marginBottom: "var(--space-5)",
           }}
         >
-          Upwork Radar
+          Freelance-Moncha
         </h1>
         <p
           style={{
@@ -96,7 +96,7 @@ export default function LandingPage() {
             margin: "0 auto var(--space-10)",
           }}
         >
-          Upwork Radar is a personal job-search intelligence dashboard for Upwork
+          Freelance-Moncha is a personal job-search intelligence dashboard for Upwork
           freelancers. It aggregates job alerts, scores every posting against your saved
           preferences, runs website audits on promising opportunities, and helps you
           draft and track personalized outreach.
@@ -156,7 +156,7 @@ export default function LandingPage() {
           fontSize: "var(--text-body-sm)",
         }}
       >
-        <span>&copy; Upwork Radar</span>
+        <span>&copy; Freelance-Moncha</span>
         <span style={{ display: "flex", gap: "var(--space-5)" }}>
           <Link href="/privacy">Privacy Policy</Link>
           <Link href="/terms">Terms of Service</Link>

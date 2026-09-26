@@ -55,7 +55,7 @@ export default function LoginPage() {
       <div className={styles.card}>
         <div className={styles.brand}>
           <span className={styles.brandMark} aria-hidden />
-          <span>Upwork Radar</span>
+          <span>Freelance-Moncha</span>
         </div>
 
         <h1 className={styles.heading}>

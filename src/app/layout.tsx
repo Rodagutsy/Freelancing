@@ -12,11 +12,11 @@ const lato = Lato({
 
 export const metadata: Metadata = {
   title: {
-    default: "Upwork Radar",
-    template: "%s · Upwork Radar",
+    default: "Freelance-Moncha",
+    template: "%s · Freelance-Moncha",
   },
   description:
-    "Personal opportunity intelligence system for high-fit Upwork jobs.",
+    "Freelance-Moncha is a personal job-search intelligence dashboard for finding and acting on high-fit Upwork opportunities.",
 };
 
 export default function RootLayout({

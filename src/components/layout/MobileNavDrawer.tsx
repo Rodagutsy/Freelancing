@@ -35,7 +35,7 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
         <div className={styles.header}>
           <span className={styles.brand}>
             <span className={styles.brandMark} aria-hidden />
-            Upwork Radar
+            Freelance-Moncha
           </span>
           <button
             type="button"
