@@ -1,3 +1,4 @@
+import { expandSkillAliases } from "@/lib/skillMatch";
 import type {
   JobRow,
   OutboundStep,
@@ -25,6 +26,7 @@ Rules:
 - Map score_total to bands: 8.0–10.0 → APPLY; 7.0–7.9 → REVIEW; 6.0–6.9 → REVIEW (usually skip); 0–5.9 → SKIP.
 - explanation: 2–4 sentences, human-readable, listing the strongest reasons for the score, the biggest gaps, and any red flags. State clearly what is unknown (e.g., "budget was not included in the email").
 - Never invent facts that are not present in the input.
+- skills_requested_synonyms lists equivalent ways of naming the same skill. Treat a listed synonym as satisfying the skill it stands for when scoring skill_match and portfolio_match, but do not count one job skill twice.
 
 Return STRICT JSON only, with exactly this shape:
 {"score_total": number, "confidence": number, "recommendation": "APPLY"|"REVIEW"|"SKIP", "explanation": string, "factors": {"portfolio_match": number, "skill_match": number, "experience": number, "client_quality": number, "budget_fit": number, "requirements_fit": number, "competition": number, "red_flags": number}}`;
@@ -88,11 +90,14 @@ export function buildScoringMessages(
   profile: ProfileRow,
   projects: PortfolioProjectRow[],
 ): { system: string; user: string } {
+  const requestedSkills = job.skills_requested ?? [];
+  const synonymLine = expandSkillAliases(requestedSkills);
+
   const user = `JOB:
 - title: ${job.title}
 - description: ${job.description}
-- skills_requested: ${job.skills_requested.join(", ") || "none listed"}
-- budget_type: ${job.budget_type ?? "not given"}
+- skills_requested: ${requestedSkills.join(", ") || "none listed"}
+${synonymLine ? `- skills_requested_synonyms: ${synonymLine}\n` : ""}- budget_type: ${job.budget_type ?? "not given"}
 - budget: ${formatBudget(job)}
 - client_rating: ${job.client_rating ?? "not given"}
 - client_reviews_count: ${job.client_reviews_count ?? "not given"}

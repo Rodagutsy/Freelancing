@@ -69,6 +69,16 @@ import {
   suppressedContactCreateSchema,
 } from "@/lib/schemas/outreach";
 import { checkRateLimit, authRateRules, aiRateRules, type RateLimitRule } from "@/lib/security/rateLimit";
+import {
+  applicationQAInputSchema,
+  type ApplicationQAInput,
+} from "@/lib/schemas/questionAnswering";
+import { answerApplicationQuestions } from "@/lib/services/questionAnswering";
+import {
+  coverLetterInputSchema,
+  type CoverLetterInput,
+} from "@/lib/schemas/coverLetter";
+import { generateCoverLetter } from "@/lib/services/coverLetter";
 import { postWebhook, requireWebhookConfig } from "@/lib/security/webhook";
 
 export interface ActionResult<T = undefined> {
@@ -472,6 +482,92 @@ export async function generateProposalAction(
         angle: proposal.angle,
         usedProjects: proposal.used_projects,
       },
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Application screening questions                                      */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Drafts answers to Upwork screening questions. Answers are ephemeral — the
+ * freelancer copies them into Upwork; nothing is persisted.
+ */
+export async function answerApplicationQuestionsAction(
+  input: ApplicationQAInput,
+  profileId?: string,
+): Promise<ActionResult<{ answers: Array<{ question: string; answer: string }> }>> {
+  const parsed = applicationQAInputSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  let personaId: string | undefined = profileId;
+  if (personaId !== undefined && personaId !== "") {
+    const parsedPersona = uuidSchema.safeParse(personaId);
+    if (!parsedPersona.success) return { ok: false, error: "Invalid persona id." };
+    personaId = parsedPersona.data;
+  } else {
+    personaId = undefined;
+  }
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const aiThrottled = await enforceAiRateLimit(user.id, "qa");
+  if (aiThrottled) return aiThrottled;
+
+  try {
+    const supabase = await createClient();
+    const result = await answerApplicationQuestions(
+      supabase,
+      parsed.data.jobId,
+      parsed.data.questions,
+      personaId,
+    );
+    return { ok: true, data: { answers: result.answers } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Standalone cover letter (off-platform jobs)                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Generates a cover letter from a pasted job description. Nothing is
+ * persisted — the freelancer copies the text out.
+ */
+export async function generateCoverLetterAction(
+  input: CoverLetterInput,
+  profileId?: string,
+): Promise<ActionResult<{ letterText: string; angle: string }>> {
+  const parsed = coverLetterInputSchema.safeParse(input);
+  if (!parsed.success) return fail(parsed.error);
+
+  let personaId: string | undefined = profileId;
+  if (personaId !== undefined && personaId !== "") {
+    const parsedPersona = uuidSchema.safeParse(personaId);
+    if (!parsedPersona.success) return { ok: false, error: "Invalid persona id." };
+    personaId = parsedPersona.data;
+  } else {
+    personaId = undefined;
+  }
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const aiThrottled = await enforceAiRateLimit(user.id, "coverLetter");
+  if (aiThrottled) return aiThrottled;
+
+  try {
+    const supabase = await createClient();
+    const letter = await generateCoverLetter(supabase, parsed.data, personaId);
+    return {
+      ok: true,
+      data: { letterText: letter.letter_text, angle: letter.angle },
     };
   } catch (error) {
     return fail(error);

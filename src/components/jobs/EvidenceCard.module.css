@@ -26,10 +26,13 @@
   display: flex;
   gap: var(--space-2);
   flex-shrink: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .strength,
-.status {
+.status,
+.match {
   display: inline-flex;
   align-items: center;
   min-height: 24px;
@@ -38,6 +41,7 @@
   font-size: var(--text-meta);
   line-height: var(--text-meta-lh);
   font-weight: 700;
+  white-space: nowrap;
 }
 
 .strength {
@@ -48,6 +52,29 @@
 .status {
   color: var(--info);
   border: 1px solid var(--border-strong);
+}
+
+.match {
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.matchList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.matchList li {
+  padding: 2px var(--space-2);
+  border: 1px dashed var(--gold-700);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--gold-400);
 }
 
 .skills {

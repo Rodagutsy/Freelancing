@@ -1,3 +1,4 @@
+import { matchSkills, type SkillMatch } from "@/lib/skillMatch";
 import type {
   DatabaseClient,
   JobFeedRow,
@@ -117,26 +118,37 @@ const STRENGTH_RANK: Record<PortfolioProjectRow["strength"], number> = {
   low: 2,
 };
 
-/** Rank portfolio projects by skill overlap, then declared strength. */
+/**
+ * Rank portfolio projects by skill overlap, then declared strength. Matching
+ * uses whole normalized skill terms plus SKILL_ALIASES synonyms, so
+ * "workflow automation" in a job still surfaces an n8n project.
+ */
+export function rankPortfolioProjects(
+  projects: PortfolioProjectRow[],
+  skillsRequested: string[],
+): Array<{ project: PortfolioProjectRow; matches: SkillMatch[] }> {
+  return projects
+    .map((project) => ({
+      project,
+      matches: matchSkills(skillsRequested, project.skills),
+      rank: STRENGTH_RANK[project.strength],
+    }))
+    .filter((entry) => entry.matches.length > 0)
+    .sort(
+      (a, b) =>
+        b.matches.length - a.matches.length ||
+        a.rank - b.rank ||
+        a.project.title.localeCompare(b.project.title),
+    );
+}
+
+/** Top matching portfolio projects for a job, for use as proposal evidence. */
 export function matchPortfolioProjects(
   projects: PortfolioProjectRow[],
   skillsRequested: string[],
   limit = 3,
 ): PortfolioProjectRow[] {
-  const lower = skillsRequested.map((s) => s.toLowerCase());
-
-  return projects
-    .map((project) => {
-      const overlap = project.skills.filter((skill) =>
-        lower.includes(skill.toLowerCase()),
-      ).length;
-      return { project, overlap, rank: STRENGTH_RANK[project.strength] };
-    })
-    .filter((entry) => entry.overlap > 0)
-    .sort(
-      (a, b) =>
-        b.overlap - a.overlap || a.rank - b.rank || a.project.title.localeCompare(b.project.title),
-    )
+  return rankPortfolioProjects(projects, skillsRequested)
     .slice(0, limit)
     .map((entry) => entry.project);
 }

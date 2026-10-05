@@ -98,4 +98,7 @@ export const aiRateRules = {
   draft: { limit: 10, windowMs: 60 * 60 * 1000 },
   revise: { limit: 10, windowMs: 60 * 60 * 1000 },
   pitch: { limit: 10, windowMs: 60 * 60 * 1000 },
+  qa: { limit: 10, windowMs: 60 * 60 * 1000 },
+  coverLetter: { limit: 10, windowMs: 60 * 60 * 1000 },
+  resume: { limit: 3, windowMs: 60 * 60 * 1000 },
 } as const;

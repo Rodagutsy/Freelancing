@@ -1,0 +1,53 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.submit {
+  flex: 1;
+}
+
+.actionIcon {
+  width: 16px;
+  height: 16px;
+}
+
+.output {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.outputHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.outputIcon {
+  width: 16px;
+  height: 16px;
+  color: var(--gold-500);
+}
+
+.outputLabel {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.angle {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-muted);
+}
+
+.angleLabel {
+  font-weight: 700;
+  color: var(--gold-500);
+}

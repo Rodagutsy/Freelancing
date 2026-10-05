@@ -25,6 +25,8 @@ const securityHeaders = [
 ];
 
 const nextConfig: NextConfig = {
+  // pdf-parse pulls in pdfjs-dist, which must not be bundled or traced away.
+  serverExternalPackages: ["pdf-parse"],
   async headers() {
     return [
       {

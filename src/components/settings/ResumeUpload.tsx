@@ -1,0 +1,308 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { FileText, LoaderCircle, Upload, X } from "lucide-react";
+import { saveProfile } from "@/app/actions";
+import type { ProfileRow } from "@/lib/types";
+import type { ResumeExtract, ResumeExtractField } from "@/lib/schemas/resume";
+import { Button } from "@/components/common/Button";
+import { FormField } from "@/components/common/FormField";
+import { useToast } from "@/components/common/Toast";
+import { cn } from "@/lib/utils";
+import fieldStyles from "@/components/common/fields.module.css";
+import styles from "./ResumeUpload.module.css";
+
+interface ExtractedField {
+  field: ResumeExtractField;
+  label: string;
+  value: string;
+  /** True when the user unticked this field in the preview. */
+  skipped: boolean;
+}
+
+interface ResumeResponse {
+  extract: ResumeExtract;
+  fields: ExtractedField[];
+}
+
+interface ResumeUploadProps {
+  profiles: ProfileRow[];
+}
+
+function listValue(value: string): string[] {
+  return value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+/** Merges extracted values into a persona. Skills are a hint only — they are
+ *  not a profile field, so they are shown but never written. */
+function mergeIntoProfile(
+  profile: ProfileRow,
+  applied: Map<ResumeExtractField, string>,
+): Parameters<typeof saveProfile>[0] {
+  const take = (field: ResumeExtractField): string | undefined =>
+    applied.get(field);
+
+  const services = take("services");
+  const niches = take("niches");
+
+  return {
+    label: profile.label,
+    name: take("name") ?? profile.name,
+    headline: take("headline") ?? profile.headline,
+    bio: take("bio") ?? profile.bio ?? null,
+    services: services ? listValue(services) : profile.services,
+    niches: niches ? listValue(niches) : profile.niches,
+    target_rate_min:
+      take("target_rate_min") !== undefined
+        ? Number(take("target_rate_min"))
+        : profile.target_rate_min,
+    target_rate_max:
+      take("target_rate_max") !== undefined
+        ? Number(take("target_rate_max"))
+        : profile.target_rate_max,
+    behance_url: profile.behance_url,
+    pinterest_url: profile.pinterest_url,
+    linkedin_url: profile.linkedin_url,
+    upwork_profile_url: profile.upwork_profile_url,
+    website_url: profile.website_url,
+  };
+}
+
+export function ResumeUpload({ profiles }: ResumeUploadProps) {
+  const router = useRouter();
+  const { toast } = useToast();
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const [fileName, setFileName] = useState<string | null>(null);
+  const [parsing, setParsing] = useState(false);
+  const [applying, setApplying] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [fields, setFields] = useState<ExtractedField[] | null>(null);
+  const [personaId, setPersonaId] = useState<string>(
+    profiles.find((p) => p.is_default)?.id ?? profiles[0]?.id ?? "",
+  );
+
+  function reset() {
+    setFields(null);
+    setFileName(null);
+    setError(null);
+    if (inputRef.current) inputRef.current.value = "";
+  }
+
+  async function upload(file: File) {
+    setError(null);
+    setFields(null);
+    setFileName(file.name);
+
+    const body = new FormData();
+    body.append("file", file);
+
+    setParsing(true);
+    try {
+      const response = await fetch("/api/resume", {
+        method: "POST",
+        body,
+      });
+      const payload = (await response.json()) as
+        | ResumeResponse
+        | { error?: string };
+
+      if (!response.ok || !("fields" in payload)) {
+        setError(
+          ("error" in payload && payload.error) ||
+            "Couldn't read that resume. Try again or paste the text.",
+        );
+        return;
+      }
+
+      if (payload.fields.length === 0) {
+        setError(
+          "Nothing confident enough to extract. Try a resume with more detail.",
+        );
+        return;
+      }
+      setFields(payload.fields.map((f) => ({ ...f, skipped: false })));
+    } catch {
+      setError("Upload failed. Check your connection and try again.");
+    } finally {
+      setParsing(false);
+    }
+  }
+
+  function toggleField(field: ResumeExtractField) {
+    setFields((prev) =>
+      prev === null
+        ? prev
+        : prev.map((f) => (f.field === field ? { ...f, skipped: !f.skipped } : f)),
+    );
+  }
+
+  async function apply() {
+    if (!fields || !personaId) return;
+    const profile = profiles.find((p) => p.id === personaId);
+    if (!profile) {
+      setError("That persona no longer exists. Pick another one.");
+      return;
+    }
+
+    // skills is a portfolio hint, not a profile column — keep it out of the write.
+    const applied = new Map(
+      fields
+        .filter((f) => !f.skipped)
+        .map((f) => [f.field, f.value] as const),
+    );
+    applied.delete("skills");
+
+    setApplying(true);
+    const result = await saveProfile(mergeIntoProfile(profile, applied), profile.id);
+    setApplying(false);
+
+    if (result.ok) {
+      toast(`${profile.label} updated from your resume.`, "success");
+      reset();
+      router.refresh();
+    } else {
+      setError(result.error ?? "Couldn't save the extracted fields.");
+    }
+  }
+
+  const appliedCount =
+    fields?.filter((f) => !f.skipped && f.field !== "skills").length ?? 0;
+
+  return (
+    <div className={styles.wrap}>
+      <p className={styles.hint}>
+        Upload a resume and review what the AI found before anything is saved.
+        Applied fields overwrite the persona you pick below — skills are shown
+        as a hint for adding portfolio projects, not written anywhere.
+      </p>
+
+      <div
+        className={cn(styles.dropzone, dragging && styles.dropzoneActive)}
+        onDragOver={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          const file = event.dataTransfer.files?.[0];
+          if (file) void upload(file);
+        }}
+      >
+        <input
+          ref={inputRef}
+          type="file"
+          accept=".pdf,.txt,.md,application/pdf,text/plain"
+          className={styles.fileInput}
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            if (file) void upload(file);
+          }}
+          aria-label="Resume file"
+        />
+        <FileText className={styles.dropIcon} aria-hidden />
+        <p className={styles.dropTitle}>
+          {fileName ?? "Drop a resume here, or choose a file"}
+        </p>
+        <p className={styles.dropHint}>
+          PDF or .txt, up to 2 MB. Scanned image-only PDFs can&apos;t be read.
+        </p>
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => inputRef.current?.click()}
+          loading={parsing}
+        >
+          <Upload className={styles.actionIcon} aria-hidden />
+          {parsing ? "Reading resume…" : "Choose file"}
+        </Button>
+      </div>
+
+      {parsing && (
+        <p className={styles.status} role="status">
+          <LoaderCircle className={styles.spinIcon} aria-hidden />
+          Extracting your profile details — this takes a few seconds.
+        </p>
+      )}
+
+      {error && (
+        <p className={styles.error} role="alert">
+          {error}
+        </p>
+      )}
+
+      {fields && fields.length > 0 && (
+        <div className={styles.preview}>
+          <div className={styles.previewHead}>
+            <h3 className={styles.previewTitle}>
+              We found {fields.length} field{fields.length === 1 ? "" : "s"}
+            </h3>
+            <p className={styles.previewHint}>
+              Untick anything you don&apos;t want, then apply.
+            </p>
+          </div>
+
+          <ul className={styles.fieldList}>
+            {fields.map((field) => (
+              <li key={field.field} className={styles.fieldRow}>
+                <label className={styles.fieldToggle}>
+                  <input
+                    type="checkbox"
+                    checked={!field.skipped}
+                    onChange={() => toggleField(field.field)}
+                  />
+                  <span className={styles.fieldLabel}>{field.label}</span>
+                </label>
+                <span className={styles.fieldValue}>{field.value}</span>
+              </li>
+            ))}
+          </ul>
+
+          <FormField
+            label="Apply to persona"
+            htmlFor="resume-persona"
+            hint="Extracted values overwrite this persona's fields."
+          >
+            <select
+              id="resume-persona"
+              className={fieldStyles.input}
+              value={personaId}
+              onChange={(event) => setPersonaId(event.target.value)}
+              disabled={applying}
+            >
+              {profiles.map((persona) => (
+                <option key={persona.id} value={persona.id}>
+                  {persona.label}
+                  {persona.is_default ? " (default)" : ""}
+                </option>
+              ))}
+            </select>
+          </FormField>
+
+          <div className={styles.actions}>
+            <Button variant="secondary" onClick={reset} disabled={applying}>
+              <X className={styles.actionIcon} aria-hidden />
+              Discard
+            </Button>
+            <Button
+              onClick={() => void apply()}
+              loading={applying}
+              disabled={appliedCount === 0}
+            >
+              {applying
+                ? "Applying…"
+                : `Apply ${appliedCount} field${appliedCount === 1 ? "" : "s"}`}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

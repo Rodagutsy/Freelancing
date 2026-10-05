@@ -19,6 +19,7 @@ import { JobDecisionPanel } from "@/components/jobs/JobDecisionPanel";
 import { ScoreBreakdown } from "@/components/jobs/ScoreBreakdown";
 import { EvidenceCard } from "@/components/jobs/EvidenceCard";
 import { ProposalEditor } from "@/components/proposals/ProposalEditor";
+import { ApplicationQA } from "@/components/jobs/ApplicationQA";
 import { NotesEditor } from "@/components/applications/NotesEditor";
 import { SkillTag } from "@/components/common/SkillTag";
 import { MetadataRow } from "@/components/jobs/MetadataRow";
@@ -79,10 +80,11 @@ export default async function JobDetailPage({
   const draftPersonaId = feed.score_profile_id ?? defaultProfile?.id ?? null;
 
   const usedIds = feed.proposal_used_projects ?? [];
-  let citedProjects = projects.filter((p) => usedIds.includes(p.id));
-  if (citedProjects.length === 0) {
-    citedProjects = matchPortfolioProjects(projects, feed.skills_requested, 3);
-  }
+  const proposedProjects = projects.filter((p) => usedIds.includes(p.id));
+  const citedProjects =
+    proposedProjects.length > 0
+      ? proposedProjects
+      : matchPortfolioProjects(projects, feed.skills_requested, 3);
 
   const score = feed.score_total;
   const canGenerate = (score ?? 0) >= 7 || Boolean(feed.proposal_id);
@@ -216,7 +218,11 @@ export default async function JobDetailPage({
             {citedProjects.length > 0 ? (
               <div className={styles.evidenceList}>
                 {citedProjects.map((project) => (
-                  <EvidenceCard key={project.id} project={project} />
+                  <EvidenceCard
+                    key={project.id}
+                    project={project}
+                    skillsRequested={feed.skills_requested}
+                  />
                 ))}
               </div>
             ) : (
@@ -244,6 +250,18 @@ export default async function JobDetailPage({
                   : null
               }
               canGenerate={canGenerate}
+              profiles={personaOptions}
+              defaultPersonaId={draftPersonaId}
+            />
+          </section>
+
+          <section className={styles.section} aria-labelledby="application-questions">
+            <h2 id="application-questions" className={styles.sectionTitle}>
+              Screening questions
+            </h2>
+            <ApplicationQA
+              key={`qa-${feed.id}-${draftPersonaId ?? "default"}`}
+              jobId={feed.id}
               profiles={personaOptions}
               defaultPersonaId={draftPersonaId}
             />

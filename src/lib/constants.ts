@@ -69,6 +69,48 @@ export const OUTCOME_META: Record<
   rejected: { label: "Rejected", tone: "danger" },
 };
 
+/**
+ * Skill synonyms used for evidence matching and given to the scoring AI so it
+ * can credit partial overlaps ("n8n" vs "workflow automation"). Keys are
+ * lower-cased and matched on word boundaries — never substring-matched, so
+ * "ai" does not match "email".
+ */
+export const SKILL_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  n8n: ["workflow automation", "automation workflow", "node automation", "self-hosted automation"],
+  zapier: ["workflow automation", "no-code automation", "app automation"],
+  "make.com": ["workflow automation", "no-code automation", "app automation"],
+  airtable: ["no-code database", "relational database"],
+  supabase: ["postgres", "postgresql", "backend database"],
+  postgres: ["supabase", "relational database"],
+  react: ["frontend", "front-end", "react.js"],
+  nextjs: ["next.js", "react", "ssr"],
+  typescript: ["javascript", "js", "ts"],
+  javascript: ["typescript", "js"],
+  node: ["node.js", "nodejs", "backend", "api"],
+  python: ["data processing", "automation scripting"],
+  api: ["rest api", "webhooks", "web service", "integration"],
+  webhook: ["webhooks", "api", "callback"],
+  integration: ["api", "webhooks", "automation", "zapier"],
+  automation: ["workflow automation", "n8n", "process automation", "integration"],
+  crm: ["gohighlevel", "hubspot", "salesforce", "customer management"],
+  gohighlevel: ["crm", "go high level", "ghl"],
+  llm: ["ai", "large language model", "gpt", "chatgpt"],
+  ai: ["llm", "gpt", "machine learning", "artificial intelligence"],
+  "machine learning": ["ai", "data science", "llm"],
+  "power bi": ["data visualization", "business intelligence", "dashboard"],
+  tableau: ["data visualization", "business intelligence", "dashboard"],
+  excel: ["spreadsheets", "data analysis", "google sheets"],
+  "google sheets": ["excel", "spreadsheets", "airtable"],
+  wordpress: ["elementor", "woocommerce", "cms"],
+  shopify: ["ecommerce", "woocommerce", "storefront"],
+  figma: ["ui design", "ux design", "design system"],
+  "ui/ux": ["ui design", "ux design", "figma", "web design"],
+  webflow: ["no-code website", "cms", "landing pages"],
+};
+
+/** Upper bound on how many matched skill names are echoed back to the AI. */
+export const MAX_MATCHED_SKILLS_IN_PROMPT = 12;
+
 export const PROPOSAL_INSTRUCTIONS = [
   "Shorter",
   "More technical",

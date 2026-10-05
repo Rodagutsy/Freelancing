@@ -2,11 +2,13 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { listOutboundFeed } from "@/lib/services/outreach";
+import { getDefaultProfile, getProfiles } from "@/lib/services/settings";
 import { OUTBOUND_STATUS_META } from "@/lib/constants";
 import type { OutboundStatus } from "@/lib/types";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { OutboundCard } from "@/components/outbounds/OutboundCard";
 import { OutboundStatusFilter } from "@/components/outbounds/OutboundStatusFilter";
+import { CoverLetterLauncher } from "@/components/outbounds/CoverLetterLauncher";
 import { EmptyState } from "@/components/common/EmptyState";
 import styles from "./page.module.css";
 
@@ -26,6 +28,10 @@ export default async function OutboundsPage({
   }
 
   const supabase = await createClient();
+  const [profiles, defaultProfile] = await Promise.all([
+    getProfiles(supabase),
+    getDefaultProfile(supabase),
+  ]);
   const page = Math.max(1, Number(params.get("page") ?? 1) || 1);
   const rawStatus = params.get("status") ?? undefined;
   const status = (rawStatus && rawStatus in OUTBOUND_STATUS_META

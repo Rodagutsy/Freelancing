@@ -5,6 +5,7 @@ import { listWatchedCompanies } from "@/lib/services/watchedCompanies";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { PersonaManager } from "@/components/settings/PersonaManager";
+import { ResumeUpload } from "@/components/settings/ResumeUpload";
 import { WatchedCompanies } from "@/components/settings/WatchedCompanies";
 import styles from "./page.module.css";
 
@@ -77,6 +78,20 @@ export default async function SettingsPage() {
         </p>
         <PersonaManager profiles={profiles} />
       </section>
+
+      {profiles.length > 0 && (
+        <section className={styles.section} aria-labelledby="resume-heading">
+          <h2 id="resume-heading" className={styles.sectionTitle}>
+            Resume import
+          </h2>
+          <p className={styles.sectionHint}>
+            Upload a resume (PDF or text) and the AI fills in your persona
+            fields. You review every value before it is saved — nothing is
+            written automatically.
+          </p>
+          <ResumeUpload profiles={profiles} />
+        </section>
+      )}
 
       <section className={styles.section} aria-labelledby="watched-heading">
         <h2 id="watched-heading" className={styles.sectionTitle}>
