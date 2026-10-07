@@ -45,6 +45,7 @@ import {
   updateProspect,
 } from "@/lib/services/prospects";
 import { generatePitch } from "@/lib/services/pitchGenerator";
+import { getAuditOfferContext } from "@/lib/services/auditOffers";
 import { generateOutboundDraft, reviseOutboundDraft } from "@/lib/services/outreachDraft";
 import {
   queueOutboundForSend,
@@ -996,9 +997,81 @@ export async function generatePitchAction(
   }
 }
 
-/* ------------------------------------------------------------------ */
-/* Prospects                                                           */
-/* ------------------------------------------------------------------ */
+export interface PitchPacketData {
+  businessName: string;
+  url: string;
+  subjectLine: string;
+  pitchText: string;
+  keyPoints: string[];
+  profileName: string | null;
+  needs: Array<{
+    kind: "opportunity" | "issue";
+    title: string;
+    summary: string;
+    marker: string;
+    score: number | null;
+  }>;
+  offers: Array<{
+    opportunityTitle: string;
+    matchedServices: string[];
+    matchedProjects: Array<{ title: string; skills: string[] }>;
+  }>;
+}
+
+export async function buildPitchPacketAction(
+  auditId: string,
+  opportunityIds: string[],
+): Promise<ActionResult<PitchPacketData>> {
+  const parsedAudit = uuidSchema.safeParse(auditId);
+  if (!parsedAudit.success) return { ok: false, error: "Invalid audit id." };
+
+  const parsedPitch = pitchGenerateSchema.safeParse({
+    audit_id: auditId,
+    opportunity_ids: opportunityIds,
+  });
+  if (!parsedPitch.success) return fail(parsedPitch.error);
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const aiThrottled = await enforceAiRateLimit(user.id, "pitch");
+  if (aiThrottled) return aiThrottled;
+
+  try {
+    const supabase = await createClient();
+    const [context, result] = await Promise.all([
+      getAuditOfferContext(supabase, parsedAudit.data),
+      generatePitch(supabase, parsedAudit.data, opportunityIds),
+    ]);
+
+    const selected = context.offers.filter((offer) =>
+      opportunityIds.includes(offer.opportunity.id),
+    );
+
+    return {
+      ok: true,
+      data: {
+        businessName: context.audit.business_name ?? context.audit.url,
+        url: context.audit.url,
+        subjectLine: result.subject_line,
+        pitchText: result.pitch_text,
+        keyPoints: result.key_points,
+        profileName: context.profile?.name ?? null,
+        needs: context.needs,
+        offers: selected.map((offer) => ({
+          opportunityTitle: offer.opportunity.title,
+          matchedServices: offer.matchedServices,
+          matchedProjects: offer.matchedProjects.map((entry) => ({
+            title: entry.project.title,
+            skills: entry.matchedSkills,
+          })),
+        })),
+      },
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
 
 export async function createProspectAction(
   input: z.infer<typeof prospectCreateSchema>,

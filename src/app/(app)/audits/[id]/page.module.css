@@ -352,3 +352,136 @@
   align-items: center;
   gap: var(--space-3);
 }
+
+.needList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.needCard {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: border-color var(--transition-fast);
+}
+
+.needCard:hover {
+  border-color: var(--border-strong);
+}
+
+.needTop {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.needTitle {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-body);
+  line-height: var(--text-body-lh);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.oppDetail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.oppDetailLabel {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+}
+
+.oppDetailText {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  color: var(--text-secondary);
+}
+
+.offerBlock {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+}
+
+.offerTitle {
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--gold-400);
+}
+
+.offerServices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.offerService {
+  display: inline-flex;
+  align-items: center;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-pill);
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 700;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+}
+
+.offerProjects {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.offerProject {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--border-strong);
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--bg-surface);
+}
+
+.offerProjectTitle {
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm-lh);
+  font-weight: 700;
+  color: var(--info);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.offerProjectMeta {
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  color: var(--text-muted);
+}
+
+.pitchActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}

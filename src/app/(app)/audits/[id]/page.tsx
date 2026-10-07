@@ -6,14 +6,17 @@ import {
   getAudit,
   getAuditPages,
   getAuditTechnologies,
-  getAuditIssues,
-  getAuditOpportunities,
 } from "@/lib/services/audits";
+import {
+  getAuditOfferContext,
+  type AuditOfferContext,
+} from "@/lib/services/auditOffers";
 import { formatRelative } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { ErrorState } from "@/components/common/ErrorState";
 import { PitchButton } from "@/components/audits/PitchButton";
+import { PitchPacket } from "@/components/audits/PitchPacket";
 import { AuditProgressPoller } from "@/components/audits/AuditProgressPoller";
 import { DeleteAuditButton } from "@/components/audits/DeleteAuditButton";
 import styles from "./page.module.css";
@@ -97,17 +100,20 @@ export default async function AuditDetailPage({
 
   let pages: Awaited<ReturnType<typeof getAuditPages>> = [];
   let technologies: Awaited<ReturnType<typeof getAuditTechnologies>> = [];
-  let issues: Awaited<ReturnType<typeof getAuditIssues>> = [];
-  let opportunities: Awaited<ReturnType<typeof getAuditOpportunities>> = [];
+  let context: AuditOfferContext | null = null;
 
   if (isCompleted || audit.status === "failed") {
-    [pages, technologies, issues, opportunities] = await Promise.all([
+    [pages, technologies, context] = await Promise.all([
       getAuditPages(supabase, audit.id),
       getAuditTechnologies(supabase, audit.id),
-      getAuditIssues(supabase, audit.id),
-      getAuditOpportunities(supabase, audit.id),
+      getAuditOfferContext(supabase, audit.id),
     ]);
   }
+
+  const issues = context?.issues ?? [];
+  const offers = context?.offers ?? [];
+  const opportunities = offers.map((o) => o.opportunity);
+  const needs = context?.needs ?? [];
 
   const scores = [
     { label: "Overall", value: audit.overall_score },
@@ -167,6 +173,31 @@ export default async function AuditDetailPage({
             </div>
           ))}
         </div>
+      )}
+
+      {isCompleted && needs.length > 0 && (
+        <section className={styles.section} aria-labelledby="needs">
+          <h2 id="needs" className={styles.sectionTitle}>
+            What this business needs
+          </h2>
+          <div className={styles.needList}>
+            {needs.map((need, index) => (
+              <div key={`${need.kind}-${index}`} className={styles.needCard}>
+                <div className={styles.needTop}>
+                  <StatusBadge
+                    label={need.marker}
+                    tone={need.kind === "opportunity" ? "success" : "danger"}
+                  />
+                  <span className={styles.needTitle}>{need.title}</span>
+                  {need.score !== null && (
+                    <span className={styles.oppScore}>{need.score}</span>
+                  )}
+                </div>
+                <p className={styles.issueDescription}>{need.summary}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {isCompleted && technologies.length > 0 && (
@@ -251,7 +282,7 @@ export default async function AuditDetailPage({
             Opportunities
           </h2>
           <div className={styles.opportunityList}>
-            {opportunities.map((opp) => {
+            {offers.map(({ opportunity: opp, matchedServices, matchedProjects, hasFit }) => {
               const cat = OPP_CATEGORY_META[opp.category] ?? {
                 label: opp.category,
               };
@@ -264,6 +295,20 @@ export default async function AuditDetailPage({
                     )}
                   </div>
                   <p className={styles.oppSignal}>{opp.observed_signal}</p>
+
+                  {opp.inference && (
+                    <div className={styles.oppDetail}>
+                      <span className={styles.oppDetailLabel}>Why it matters</span>
+                      <p className={styles.oppDetailText}>{opp.inference}</p>
+                    </div>
+                  )}
+                  {opp.outreach_angle && (
+                    <div className={styles.oppDetail}>
+                      <span className={styles.oppDetailLabel}>How to pitch it</span>
+                      <p className={styles.oppDetailText}>{opp.outreach_angle}</p>
+                    </div>
+                  )}
+
                   <div className={styles.oppMeta}>
                     <StatusBadge label={cat.label} tone="info" />
                     <span className={styles.oppMetaItem}>
@@ -281,6 +326,65 @@ export default async function AuditDetailPage({
                       </span>
                     )}
                   </div>
+
+                  {opp.recommended_workflow && (
+                    <div className={styles.oppDetail}>
+                      <span className={styles.oppDetailLabel}>Workflow</span>
+                      <p className={styles.oppDetailText}>{opp.recommended_workflow}</p>
+                    </div>
+                  )}
+                  {opp.implementation_notes && (
+                    <div className={styles.oppDetail}>
+                      <span className={styles.oppDetailLabel}>Implementation notes</span>
+                      <p className={styles.oppDetailText}>{opp.implementation_notes}</p>
+                    </div>
+                  )}
+
+                  {hasFit && (
+                    <div className={styles.offerBlock}>
+                      <p className={styles.offerTitle}>You can deliver this</p>
+                      {matchedServices.length > 0 && (
+                        <div className={styles.offerServices}>
+                          {matchedServices.map((service) => (
+                            <span key={service} className={styles.offerService}>
+                              {service}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {matchedProjects.length > 0 && (
+                        <div className={styles.offerProjects}>
+                          {matchedProjects.map(({ project, matchedSkills }) =>
+                            project.evidence_links[0] ? (
+                              <a
+                                key={project.id}
+                                href={project.evidence_links[0]}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className={styles.offerProject}
+                              >
+                                <span className={styles.offerProjectTitle}>
+                                  {project.title}
+                                </span>
+                                <span className={styles.offerProjectMeta}>
+                                  {matchedSkills.join(", ")}
+                                </span>
+                              </a>
+                            ) : (
+                              <div key={project.id} className={styles.offerProject}>
+                                <span className={styles.offerProjectTitle}>
+                                  {project.title}
+                                </span>
+                                <span className={styles.offerProjectMeta}>
+                                  {matchedSkills.join(", ")}
+                                </span>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -294,10 +398,16 @@ export default async function AuditDetailPage({
             Generate Pitch
           </h2>
           <div className={styles.pitchSection}>
-            <PitchButton
-              auditId={audit.id}
-              opportunityIds={opportunities.map((o) => o.id)}
-            />
+            <div className={styles.pitchActions}>
+              <PitchButton
+                auditId={audit.id}
+                opportunityIds={opportunities.map((o) => o.id)}
+              />
+              <PitchPacket
+                auditId={audit.id}
+                opportunityIds={opportunities.map((o) => o.id)}
+              />
+            </div>
           </div>
         </section>
       )}

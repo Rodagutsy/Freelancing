@@ -23,17 +23,6 @@ export const ATS_KEYWORDS: ReadonlyArray<string> = [
   "email marketing", "performance marketing",
 ];
 
-export const NAV_ITEMS = [
-  { href: "/dashboard", label: "Dashboard" },
-  { href: "/jobs", label: "Jobs" },
-  { href: "/applications", label: "Applications" },
-  { href: "/portfolio", label: "Portfolio" },
-  { href: "/audits", label: "Audits" },
-  { href: "/prospects", label: "Prospects" },
-  { href: "/settings", label: "Settings" },
-] as const;
-
-/** Scoring factors and weights from the PRD §8.1. */
 export const SCORE_FACTORS: ReadonlyArray<{
   key: string;
   label: string;

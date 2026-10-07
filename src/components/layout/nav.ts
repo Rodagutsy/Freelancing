@@ -17,16 +17,41 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
-export const NAV_ITEMS: NavItem[] = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/jobs", label: "Jobs", icon: Briefcase },
-  { href: "/applications", label: "Applications", icon: ClipboardCheck },
-  { href: "/portfolio", label: "Portfolio", icon: FolderKanban },
-  { href: "/audits", label: "Audits", icon: BarChart3 },
-  { href: "/prospects", label: "Prospects", icon: Users },
-  { href: "/outbounds", label: "Outreach", icon: Send },
-  { href: "/outbounds/suppressed", label: "Blocklist", icon: Ban },
+export interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+/**
+ * Grouped navigation keeps the sidebar short and skimmable: a one-screen
+ * "Overview", the daily "Work" pipeline, and everything outreach-related under
+ * "Growth". Settings stays pinned in the footer.
+ */
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    label: "Overview",
+    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+  },
+  {
+    label: "Work",
+    items: [
+      { href: "/jobs", label: "Jobs", icon: Briefcase },
+      { href: "/applications", label: "Applications", icon: ClipboardCheck },
+      { href: "/portfolio", label: "Portfolio", icon: FolderKanban },
+    ],
+  },
+  {
+    label: "Growth",
+    items: [
+      { href: "/audits", label: "Audits", icon: BarChart3 },
+      { href: "/prospects", label: "Prospects", icon: Users },
+      { href: "/outbounds", label: "Outreach", icon: Send },
+      { href: "/outbounds/suppressed", label: "Blocklist", icon: Ban },
+    ],
+  },
 ];
+
+export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);
 
 export const SETTINGS_ITEM: NavItem = {
   href: "/settings",

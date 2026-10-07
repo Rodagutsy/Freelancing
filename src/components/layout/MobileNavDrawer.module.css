@@ -84,10 +84,29 @@
   padding: var(--space-4) var(--space-3);
 }
 
-.items {
+.group {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
+}
+
+.groupList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.groupLabel {
+  padding: var(--space-1) var(--space-3) var(--space-1);
+  font-size: var(--text-label);
+  line-height: var(--text-label-lh);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
 }
 
 .item {

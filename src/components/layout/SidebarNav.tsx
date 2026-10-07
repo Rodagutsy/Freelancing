@@ -5,12 +5,12 @@ import { usePathname } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { signOut } from "@/app/actions";
-import { NAV_ITEMS, SETTINGS_ITEM, isNavActive } from "@/components/layout/nav";
+import { NAV_GROUPS, SETTINGS_ITEM, isNavActive } from "@/components/layout/nav";
 import styles from "./SidebarNav.module.css";
 
 export function SidebarNav() {
   const pathname = usePathname();
-  const navItems = [...NAV_ITEMS, SETTINGS_ITEM];
+  const navItems = NAV_GROUPS.flatMap((group) => group.items).concat(SETTINGS_ITEM);
 
   const isActive = (href: string) => isNavActive(navItems, pathname, href);
 
@@ -21,20 +21,27 @@ export function SidebarNav() {
         Freelance-Moncha
       </Link>
 
-      <ul className={styles.items}>
-        {NAV_ITEMS.map(({ href, label, icon: Icon }) => (
-          <li key={href}>
-            <Link
-              href={href}
-              className={cn(styles.item, isActive(href) && styles.itemActive)}
-              aria-current={isActive(href) ? "page" : undefined}
-            >
-              <Icon className={cn(styles.icon, isActive(href) && styles.iconActive)} aria-hidden />
-              <span>{label}</span>
-            </Link>
-          </li>
+      <div className={styles.items}>
+        {NAV_GROUPS.map((group) => (
+          <div key={group.label} className={styles.group}>
+            <p className={styles.groupLabel}>{group.label}</p>
+            <ul className={styles.groupList}>
+              {group.items.map(({ href, label, icon: Icon }) => (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    className={cn(styles.item, isActive(href) && styles.itemActive)}
+                    aria-current={isActive(href) ? "page" : undefined}
+                  >
+                    <Icon className={cn(styles.icon, isActive(href) && styles.iconActive)} aria-hidden />
+                    <span>{label}</span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </div>
         ))}
-      </ul>
+      </div>
 
       <div className={styles.footer}>
         <Link
