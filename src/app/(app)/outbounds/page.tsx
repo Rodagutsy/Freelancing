@@ -70,6 +70,10 @@ export default async function OutboundsPage({
             Blocklist
           </Link>
           <OutboundStatusFilter value={status ?? null} />
+          <CoverLetterLauncher
+            profiles={profiles}
+            defaultPersonaId={defaultProfile?.id ?? null}
+          />
         </div>
       </div>
 
