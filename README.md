@@ -51,6 +51,8 @@ Run in the Supabase SQL Editor, in order:
 11. `supabase/14_outreach.sql` — outbound prospecting tables (email_sequences, outbounds, outbound_messages, suppressed_contacts) + compliance fields on prospects
 12. `supabase/15_seed_email_sequences.sql` — seed the default Email 1-5 outreach sequence template
 13. `supabase/16_outbound_message_feed.sql` — sending-pipeline read view (`outbound_message_feed`)
+14. `supabase/17_multi_user_rls.sql` — per-user RLS isolation (`user_id` columns, owner-scoped policies, per-user unique indexes, `user_id` columns on read views). **Create your first auth user before running**, so the backfill has an owner to assign existing rows to. Safe to re-run.
+15. `supabase/18_rate_limits.sql` — server-side rate-limiting table (`rate_limits`). Safe to re-run.
 
 **Auth:** enable Email provider in Supabase → Authentication → Providers (magic-link OTP). RLS policy file must run before first login.
 

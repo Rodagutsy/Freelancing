@@ -122,21 +122,23 @@ $$;
 
 -- 4. Fix global uniqueness constraints so they are per-user ---------------------
 
+-- IF NOT EXISTS: this patch is re-runnable. A partial/failed run may already
+-- have created the per-user index, in which case it is a no-op here.
 DROP INDEX IF EXISTS idx_profiles_single_default;
-CREATE UNIQUE INDEX idx_profiles_single_default_per_user
+CREATE UNIQUE INDEX IF NOT EXISTS idx_profiles_single_default_per_user
   ON profiles (user_id) WHERE is_default;
 
 DROP INDEX IF EXISTS idx_jobs_url_unique;
-CREATE UNIQUE INDEX idx_jobs_url_unique_per_user ON jobs (user_id, url);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_url_unique_per_user ON jobs (user_id, url);
 
 DROP INDEX IF EXISTS idx_email_sequences_name;
-CREATE UNIQUE INDEX idx_email_sequences_name_per_user ON email_sequences (user_id, name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_email_sequences_name_per_user ON email_sequences (user_id, name);
 
 DROP INDEX IF EXISTS idx_suppressed_contacts_email;
-CREATE UNIQUE INDEX idx_suppressed_contacts_email_per_user ON suppressed_contacts (user_id, email);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_suppressed_contacts_email_per_user ON suppressed_contacts (user_id, email);
 
 DROP INDEX IF EXISTS idx_watched_companies_url;
-CREATE UNIQUE INDEX idx_watched_companies_url_per_user ON watched_companies (user_id, careers_url);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_watched_companies_url_per_user ON watched_companies (user_id, careers_url);
 
 -- The "one active campaign per prospect" constraint stays global-by-prospect:
 -- a prospect belongs to one user, so prospect_id is already unique per owner.
