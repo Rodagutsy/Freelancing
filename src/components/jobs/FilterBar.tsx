@@ -15,6 +15,7 @@ export interface FilterState {
   rating: string;
   status: string;
   skills: string;
+  persona: string;
 }
 
 export const DEFAULT_FILTERS: FilterState = {
@@ -24,6 +25,7 @@ export const DEFAULT_FILTERS: FilterState = {
   rating: "",
   status: "all",
   skills: "",
+  persona: "",
 };
 
 const SCORE_OPTIONS = [
@@ -69,6 +71,7 @@ function parseFromParams(params: URLSearchParams): FilterState {
     rating: params.get("rating") ?? DEFAULT_FILTERS.rating,
     status: params.get("status") ?? DEFAULT_FILTERS.status,
     skills: params.get("skills") ?? DEFAULT_FILTERS.skills,
+    persona: params.get("profileId") ?? DEFAULT_FILTERS.persona,
   };
 }
 
@@ -80,14 +83,16 @@ function activeCount(state: FilterState): number {
   if (state.rating) count += 1;
   if (state.status !== DEFAULT_FILTERS.status) count += 1;
   if (state.skills.trim()) count += 1;
+  if (state.persona) count += 1;
   return count;
 }
 
 interface FilterBarProps {
   searchParams: Record<string, string>;
+  profiles: Array<{ id: string; label: string }>;
 }
 
-export function FilterBar({ searchParams }: FilterBarProps) {
+export function FilterBar({ searchParams, profiles }: FilterBarProps) {
   const router = useRouter();
   const [state, setState] = useState<FilterState>(() =>
     parseFromParams(new URLSearchParams(searchParams)),
@@ -103,6 +108,7 @@ export function FilterBar({ searchParams }: FilterBarProps) {
       if (next.rating) params.set("rating", next.rating);
       if (next.status !== "all") params.set("status", next.status);
       if (next.skills.trim()) params.set("skills", next.skills.trim());
+      if (next.persona) params.set("profileId", next.persona);
       const qs = params.toString();
       router.replace(qs ? `/jobs?${qs}` : "/jobs", { scroll: false });
     },
@@ -222,6 +228,24 @@ export function FilterBar({ searchParams }: FilterBarProps) {
             ))}
           </select>
         </label>
+
+        {profiles.length > 0 && (
+          <label className={styles.field}>
+            <span className={styles.fieldLabel}>Persona</span>
+            <select
+              className={fieldStyles.select}
+              value={state.persona}
+              onChange={(event) => updateAndCommit({ persona: event.target.value })}
+            >
+              <option value="">All personas</option>
+              {profiles.map((profile) => (
+                <option key={profile.id} value={profile.id}>
+                  {profile.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         <label className={styles.skillsField}>
           <span className={styles.fieldLabel}>Skills</span>
@@ -348,6 +372,24 @@ export function FilterBar({ searchParams }: FilterBarProps) {
               ))}
             </select>
           </label>
+
+          {profiles.length > 0 && (
+            <label className={styles.field}>
+              <span className={styles.fieldLabel}>Persona</span>
+              <select
+                className={fieldStyles.select}
+                value={state.persona}
+                onChange={(event) => update({ persona: event.target.value })}
+              >
+                <option value="">All personas</option>
+                {profiles.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
 
           <label className={styles.field}>
             <span className={styles.fieldLabel}>Skills</span>

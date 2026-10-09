@@ -1,8 +1,8 @@
 # Upwork Radar
 
-A personal opportunity-intelligence dashboard for Upwork + company career boards + website auditing. Gmail saved-search alerts and ATS board polls flow through n8n into Supabase, get scored by DeepSeek, and surface in a decision-first Next.js dashboard — score, recommendation, matched evidence, and editable proposal drafts. Jobs you spot while browsing can be added manually by pasting their Upwork URL (details auto-fill when possible). Nothing is ever auto-applied. The Website & Automation Opportunity Auditor analyzes business websites to identify UX, performance, accessibility, SEO, and automation improvement opportunities, then generates personalized outreach pitches.
+A personal opportunity-intelligence dashboard for Upwork + company career boards + website auditing. Gmail saved-search alerts flow through n8n into Supabase while company ATS boards are polled **in-app** on a Vercel Cron; jobs are scored by DeepSeek (against every persona) and surface in a decision-first Next.js dashboard — score, recommendation, matched evidence, and editable proposal drafts. Jobs you spot while browsing can be added manually by pasting their Upwork URL (details auto-fill when possible). Nothing is ever auto-applied. The Website & Automation Opportunity Auditor analyzes business websites to identify UX, performance, accessibility, SEO, and automation improvement opportunities, then generates personalized outreach pitches.
 
-Pipeline: `Gmail / ATS boards → n8n → Supabase (Postgres) → Next.js dashboard`.
+Pipeline: `Gmail → n8n → Supabase (Postgres) → Next.js dashboard`, with `ATS boards → in-app intake (Vercel Cron) → Supabase → Next.js dashboard`.
 
 ## Stack
 
@@ -53,6 +53,9 @@ Run in the Supabase SQL Editor, in order:
 13. `supabase/16_outbound_message_feed.sql` — sending-pipeline read view (`outbound_message_feed`)
 14. `supabase/17_multi_user_rls.sql` — per-user RLS isolation (`user_id` columns, owner-scoped policies, per-user unique indexes, `user_id` columns on read views). **Create your first auth user before running**, so the backfill has an owner to assign existing rows to. Safe to re-run.
 15. `supabase/18_rate_limits.sql` — server-side rate-limiting table (`rate_limits`). Safe to re-run.
+16. `supabase/19_persona_cv.sql` — master CV storage per persona (`master_cv_text`, `master_cv_filename`, `master_cv_uploaded_at`). Safe to re-run.
+17. `supabase/20_multi_persona_scores.sql` — one `job_scores` row per `(user_id, job_id, profile_id)`; rebuilds `job_feed` with best-score + `persona_scores` JSONB; adds the `job_persona_scores` view. Safe to re-run.
+18. `supabase/21_ats_scrape.sql` — ATS poll bookkeeping (`last_polled_at`, `last_status`, `last_jobs_found`, `last_error`), a due-index, and resets the watchlist to inactive. Safe to re-run.
 
 **Auth:** enable Email provider in Supabase → Authentication → Providers (magic-link OTP). RLS policy file must run before first login.
 
@@ -60,16 +63,18 @@ Run in the Supabase SQL Editor, in order:
 
 Import the workflows in [`n8n/workflows/`](./n8n/workflows/) and follow [`n8n/README.md`](./n8n/README.md). Summary:
 
-1. Import `01_intake.json`, `02_scoring.json`, `04_daily_digest.json`, `05_ats_intake.json`, `10_audit_pipeline.json`, `11_audit_pitch.json`.
+1. Import `01_intake.json`, `02_scoring.json`, `04_daily_digest.json`, `10_audit_pipeline.json`, `11_audit_pitch.json`. (ATS intake now runs in-app — see [ATS Radar](#ats-radar) — so `05_ats_intake.json` is deprecated and should be left disabled.)
 2. Connect Gmail OAuth2 credentials; set env vars `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `DEEPSEEK_API_KEY`, `RADAR_EMAIL`.
-3. Re-select the referenced sub-workflow in the **Run Scoring** nodes (in both `01_intake.json` and `05_ats_intake.json`).
+3. Re-select the referenced sub-workflow in the **Run Scoring** node of `01_intake.json`.
 4. Adjust the **Parse Email** regexes to match your alert email layout; tune the digest cron.
 
 Proposals are generated **on demand only** — use the "Generate proposal" button on a job's page (calls DeepSeek server-side). n8n only ingests, scores, and notifies (daily digest + instant ≥ 9.0 alerts); it never drafts or submits proposals automatically.
 
 ### ATS Radar
 
-The `05_ats_intake.json` workflow polls ~14 company career boards (Greenhouse, Lever, Ashby, Workable, SmartRecruiters, Recruitee) every 6 hours. Companies are managed from Settings → Watched Companies. New jobs matching your 4-pillar keywords are auto-imported and scored. Paste any careers URL — the system auto-detects the ATS platform.
+ATS polling now runs **in-app** — no n8n required. A Vercel Cron (`vercel.json`, every 30 minutes) calls `GET /api/intake/run` with `Authorization: Bearer $CRON_SECRET`; the same route can be triggered manually with the **Run intake** button in Settings → Watched Companies. It polls every **active** company on Greenhouse, Lever, Ashby, Workable, SmartRecruiters, or Recruitee (Personio is not supported), matches postings against your `ATS_KEYWORDS`, imports new jobs (dedup on `(user_id, url)`), and scores them for every persona.
+
+The ~9,935 seeded companies (Greenhouse/Ashby/Lever directory) form a searchable **catalog** that starts **inactive** — only companies you activate are polled. Search the catalog and toggle companies on/off from Settings → Watched Companies; each row shows its last poll time, status, and jobs found.
 
 ### Website Auditor
 

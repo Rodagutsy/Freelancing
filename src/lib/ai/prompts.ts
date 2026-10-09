@@ -255,6 +255,56 @@ Write the proposal now. Return STRICT JSON.${instructionLine}`;
   return { system: PROPOSAL_SYSTEM, user };
 }
 
+const TAILORED_CV_SYSTEM = `You tailor a freelance consultant's master CV to a specific job posting. You REORGANIZE and PHRASE the existing CV content to spotlight what this job cares about — you do not invent anything.
+
+Hard rules:
+- Use ONLY facts present in the MASTER CV below. NEVER invent employers, dates, degrees, clients, metrics, tools, or results.
+- Keep every factual claim truthful; you may reword, reorder, and re-emphasize, and you may drop irrelevant detail.
+- Keep it a real CV: a short summary line, then the most relevant experience/projects, then skills. Plain text with simple "##" section headers and "-" bullets. No tables, no HTML, no markdown bold/italic.
+- Lead with what matches the job's requested skills and stated problem.
+- Do not fabricate contact details; reuse whatever contact info the master CV contains (if any).
+- 350–600 words.
+
+Return STRICT JSON only, with exactly this shape:
+{"cv_text": string, "angle": string, "used_projects": ["<project-uuid>", ...]}`;
+
+/** Context for the tailored-CV prompt: master CV text + the target job. */
+export interface TailoredCvPromptInput {
+  masterCv: string;
+  job: JobRow;
+  profile: ProfileRow;
+  projects: PortfolioProjectRow[];
+}
+
+export function buildTailoredCvMessages(
+  input: TailoredCvPromptInput,
+): { system: string; user: string } {
+  const { masterCv, job, profile, projects } = input;
+  const requestedSkills = job.skills_requested ?? [];
+
+  const user = `JOB:
+- title: ${job.title}
+- company: ${job.company_name ?? "not given"}
+- description: ${job.description}
+- skills_requested: ${requestedSkills.join(", ") || "none listed"}
+- url: ${job.url}
+
+PERSONA (the role this CV is being tailored for):
+- label: ${profile.label}
+- headline: ${profile.headline}
+- services: ${profile.services.join(", ")}
+
+VERIFIED PORTFOLIO (you MAY describe these, using ONLY can_claim_text):
+${formatProjects(projects) || "no portfolio projects added yet"}
+
+MASTER CV (the only experience you may draw from):
+${masterCv}
+
+Produce a tailored CV for THIS job. Return STRICT JSON.`;
+
+  return { system: TAILORED_CV_SYSTEM, user };
+}
+
 const REPLY_CLASSIFIER_SYSTEM = `You classify an inbound email reply for an automation consultant who is in the middle of a cold-outreach sequence with a prospect who has no prior relationship.
 
 Classify the intent exactly one of:

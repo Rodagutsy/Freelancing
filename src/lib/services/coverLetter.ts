@@ -52,7 +52,7 @@ export async function generateCoverLetter(
   profileId?: string,
 ): Promise<CoverLetterOutput> {
   const profile = await resolveProfile(client, profileId);
-  const projects = await listPortfolioProjects(client);
+  const projects = await listPortfolioProjects(client, profile.user_id ?? undefined);
   // There is no skills_requested to match against here, so the prompt gets the
   // strongest projects first and the AI is told to cite only what fits.
 const used = [...projects]
@@ -92,6 +92,35 @@ Write the cover letter now. Return STRICT JSON.`;
   });
 
   return coverLetterOutputSchema.parse(raw);
+}
+
+/**
+ * Cover letter for a job already in the queue. Reuses the standalone prompt by
+ * mapping the job row onto CoverLetterInput.
+ */
+export async function generateCoverLetterForJob(
+  client: DatabaseClient,
+  jobId: string,
+  profileId?: string,
+): Promise<CoverLetterOutput> {
+  const { data: jobData, error } = await client
+    .from("jobs")
+    .select("title, description, company_name")
+    .eq("id", jobId)
+    .maybeSingle();
+
+  if (error) throw new Error(error.message);
+  if (!jobData) throw new Error("Job not found.");
+
+  return generateCoverLetter(
+    client,
+    {
+      jobTitle: jobData.title,
+      jobDescription: jobData.description,
+      companyName: jobData.company_name ?? undefined,
+    },
+    profileId,
+  );
 }
 
 function formatProfileLinks(profile: ProfileRow): string {

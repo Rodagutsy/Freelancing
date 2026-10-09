@@ -32,6 +32,24 @@ export async function getProfiles(client: DatabaseClient): Promise<ProfileRow[]>
   return (data ?? []) as ProfileRow[];
 }
 
+/** Profiles owned by a specific user (for cron/service-role contexts). */
+export async function getProfilesForUser(
+  client: DatabaseClient,
+  userId: string,
+): Promise<ProfileRow[]> {
+  const { data, error } = await client
+    .from("profiles")
+    .select("*")
+    .eq("user_id", userId)
+    .order("sort_order", { ascending: true })
+    .order("created_at", { ascending: true });
+
+  if (error) {
+    throw new Error(error.message);
+  }
+  return (data ?? []) as ProfileRow[];
+}
+
 export async function getDefaultProfile(
   client: DatabaseClient,
 ): Promise<ProfileRow | null> {

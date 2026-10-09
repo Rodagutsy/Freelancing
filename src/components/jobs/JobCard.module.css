@@ -73,6 +73,43 @@
   gap: var(--space-2);
 }
 
+.personaRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.personaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--text-meta);
+  line-height: var(--text-meta-lh);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.personaChipApply {
+  border-color: var(--success, #3fb950);
+  color: var(--success, #3fb950);
+}
+
+.personaChipReview {
+  border-color: var(--warning, #d29922);
+  color: var(--warning, #d29922);
+}
+
+.personaChipSkip {
+  color: var(--text-muted);
+}
+
+.personaChipScore {
+  font-weight: 700;
+}
+
 .skipReason {
   font-size: var(--text-body-sm);
   line-height: var(--text-body-sm-lh);

@@ -5,6 +5,8 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 
 import { createClient, requireUser } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import type { WatchedCompanyRow } from "@/lib/types";
 import { applicationUpdateSchema } from "@/lib/schemas/application";
 import { addJobInputSchema } from "@/lib/schemas/job";
 import { portfolioProjectInputSchema } from "@/lib/schemas/portfolio";
@@ -16,20 +18,31 @@ import { uuidSchema } from "@/lib/schemas/common";
 import { getApplicationForJob, createApplication, updateApplication } from "@/lib/services/applications";
 import { importJobPreview, type JobImportPreview } from "@/lib/services/jobImport";
 import { downloadAndStoreImage, importLinkPreview, type LinkPreview } from "@/lib/services/linkImport";
-import { listJobs } from "@/lib/services/jobs";
+import { listJobs, listJobsMissingScores } from "@/lib/services/jobs";
 import { getLatestProposal, generateProposal } from "@/lib/services/proposals";
 import { createPortfolioProject, deletePortfolioProject, updatePortfolioProject } from "@/lib/services/portfolio";
-import { scoreJob } from "@/lib/services/scoring";
+import {
+  scoreJob,
+  scoreJobForAllPersonas,
+  scoreJobsForAllPersonas,
+} from "@/lib/services/scoring";
+import { clearPersonaCv } from "@/lib/services/personaCv";
+import { generateTailoredCv } from "@/lib/services/tailoredCv";
+import { runAtsIntake } from "@/lib/services/atsIntake";
+import { getIntakeRunOptions } from "@/lib/services/intakeOptions";
 import {
   createProfile,
   deleteProfile,
   getDefaultProfile,
+  getProfiles,
   setDefaultProfile,
   upsertProfile,
 } from "@/lib/services/settings";
 import {
   addWatchedCompany,
   deleteWatchedCompany,
+  searchWatchedCompanies,
+  setCompaniesActive,
   toggleWatchedCompany,
 } from "@/lib/services/watchedCompanies";
 import {
@@ -79,7 +92,7 @@ import {
   coverLetterInputSchema,
   type CoverLetterInput,
 } from "@/lib/schemas/coverLetter";
-import { generateCoverLetter } from "@/lib/services/coverLetter";
+import { generateCoverLetter, generateCoverLetterForJob } from "@/lib/services/coverLetter";
 import { postWebhook, requireWebhookConfig } from "@/lib/security/webhook";
 
 export interface ActionResult<T = undefined> {
@@ -618,6 +631,158 @@ export async function rescoreJobAction(
 }
 
 /* ------------------------------------------------------------------ */
+/* Multi-persona scoring                                               */
+/* ------------------------------------------------------------------ */
+
+/** Scores a job against every persona at once. */
+export async function rescoreJobAllPersonasAction(
+  jobId: string,
+): Promise<
+  ActionResult<{
+    count: number;
+    best: { scoreTotal: number; recommendation: string; personaLabel?: string } | null;
+    failures: Array<{ label: string; error: string }>;
+  }>
+> {
+  const parsedId = uuidSchema.safeParse(jobId);
+  if (!parsedId.success) return { ok: false, error: "Invalid job id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const aiThrottled = await enforceAiRateLimit(user.id, "scoreAll");
+  if (aiThrottled) return aiThrottled;
+
+  try {
+    const supabase = await createClient();
+    const { scores, failures } = await scoreJobForAllPersonas(supabase, parsedId.data);
+    revalidatePath("/jobs/[id]", "page");
+    revalidatePath("/jobs");
+    revalidatePath("/dashboard");
+
+    let best: { scoreTotal: number; recommendation: string } | null = null;
+    for (const score of scores) {
+      if (!best || Number(score.score_total) > best.scoreTotal) {
+        best = {
+          scoreTotal: Number(score.score_total),
+          recommendation: score.recommendation,
+        };
+      }
+    }
+
+    return {
+      ok: true,
+      data: { count: scores.length, best, failures },
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** Scores any jobs that don't yet have a score for every persona. */
+export async function backfillScoresAction(): Promise<
+  ActionResult<{ scored: number; skipped: number; failures: string[] }>
+> {
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const aiThrottled = await enforceAiRateLimit(user.id, "scoreAll");
+  if (aiThrottled) return aiThrottled;
+
+  try {
+    const supabase = await createClient();
+    const profiles = await getProfiles(supabase);
+    const jobIds = await listJobsMissingScores(supabase, profiles.length, 25);
+    if (jobIds.length === 0) {
+      return { ok: true, data: { scored: 0, skipped: 0, failures: [] } };
+    }
+    const result = await scoreJobsForAllPersonas(supabase, jobIds, 25);
+    revalidatePath("/jobs");
+    revalidatePath("/dashboard");
+    return { ok: true, data: result };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Application kit (tailored CV + cover letter)                        */
+/* ------------------------------------------------------------------ */
+
+export async function generateTailoredCvAction(
+  jobId: string,
+  profileId?: string,
+): Promise<ActionResult<{ cvText: string; angle: string; usedProjects: string[] }>> {
+  const parsedId = uuidSchema.safeParse(jobId);
+  if (!parsedId.success) return { ok: false, error: "Invalid job id." };
+
+  let personaId: string | undefined = profileId;
+  if (personaId !== undefined && personaId !== "") {
+    const parsedPersona = uuidSchema.safeParse(personaId);
+    if (!parsedPersona.success) return { ok: false, error: "Invalid persona id." };
+    personaId = parsedPersona.data;
+  } else {
+    personaId = undefined;
+  }
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const aiThrottled = await enforceAiRateLimit(user.id, "tailoredCv");
+  if (aiThrottled) return aiThrottled;
+
+  try {
+    const supabase = await createClient();
+    const result = await generateTailoredCv(supabase, parsedId.data, personaId);
+    return {
+      ok: true,
+      data: {
+        cvText: result.cv_text,
+        angle: result.angle,
+        usedProjects: result.used_projects,
+      },
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** Cover letter for a job already in the queue. */
+export async function generateJobCoverLetterAction(
+  jobId: string,
+  profileId?: string,
+): Promise<ActionResult<{ letterText: string; angle: string }>> {
+  const parsedId = uuidSchema.safeParse(jobId);
+  if (!parsedId.success) return { ok: false, error: "Invalid job id." };
+
+  let personaId: string | undefined = profileId;
+  if (personaId !== undefined && personaId !== "") {
+    const parsedPersona = uuidSchema.safeParse(personaId);
+    if (!parsedPersona.success) return { ok: false, error: "Invalid persona id." };
+    personaId = parsedPersona.data;
+  } else {
+    personaId = undefined;
+  }
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const aiThrottled = await enforceAiRateLimit(user.id, "coverLetter");
+  if (aiThrottled) return aiThrottled;
+
+  try {
+    const supabase = await createClient();
+    const letter = await generateCoverLetterForJob(supabase, parsedId.data, personaId);
+    return {
+      ok: true,
+      data: { letterText: letter.letter_text, angle: letter.angle },
+    };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/* ------------------------------------------------------------------ */
 /* Settings (personas)                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -718,10 +883,29 @@ export async function deletePersonaAction(
   }
 }
 
+/** Clears the stored master CV for a persona. */
+export async function clearPersonaCvAction(
+  personaId: string,
+): Promise<ActionResult> {
+  const parsedId = uuidSchema.safeParse(personaId);
+  if (!parsedId.success) return { ok: false, error: "Invalid persona id." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await clearPersonaCv(supabase, parsedId.data);
+    revalidatePath("/settings");
+    return { ok: true };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Portfolio                                                           */
 /* ------------------------------------------------------------------ */
-
 export async function savePortfolioProject(
   input: z.infer<typeof portfolioProjectInputSchema>,
   projectId?: string,
@@ -872,6 +1056,114 @@ export async function deleteWatchedCompanyAction(
   }
 }
 
+/** Manually polls the caller's active ATS boards right now. */
+export async function runAtsIntakeAction(): Promise<
+  ActionResult<{
+    companiesPolled: number;
+    jobsFound: number;
+    jobsNew: number;
+    jobsScored: number;
+    errors: Array<{ company: string; error: string }>;
+    capped: boolean;
+  }>
+> {
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const aiThrottled = await enforceAiRateLimit(user.id, "atsRun");
+  if (aiThrottled) return aiThrottled;
+
+  try {
+    const supabase = await createClient();
+    const summary = await runAtsIntake(supabase, getIntakeRunOptions("manual"));
+    revalidatePath("/settings");
+    revalidatePath("/jobs");
+    revalidatePath("/dashboard");
+    return { ok: true, data: summary };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/**
+ * Admin-scoped "cron mode" intake: runs across every user's active boards with
+ * the service-role client and the same env knobs as the cron route. Only the
+ * configured owner may trigger it. When OWNER_USER_ID is unset, any signed-in
+ * user can run it (single-user setup).
+ */
+export async function runAdminIntakeAction(): Promise<
+  ActionResult<{
+    companiesPolled: number;
+    jobsFound: number;
+    jobsNew: number;
+    jobsScored: number;
+    errors: Array<{ company: string; error: string }>;
+    capped: boolean;
+  }>
+> {
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  const ownerId = process.env.OWNER_USER_ID;
+  if (ownerId && user.id !== ownerId) {
+    return {
+      ok: false,
+      error: "Only the account owner can run a full intake.",
+    };
+  }
+
+  const aiThrottled = await enforceAiRateLimit(user.id, "atsRun");
+  if (aiThrottled) return aiThrottled;
+
+  try {
+    const admin = createAdminClient();
+    const summary = await runAtsIntake(admin, getIntakeRunOptions("cron"));
+    revalidatePath("/settings");
+    revalidatePath("/jobs");
+    revalidatePath("/dashboard");
+    return { ok: true, data: summary };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** Searches the ATS company catalog for the settings page. */
+export async function searchCompaniesAction(
+  query: string,
+): Promise<ActionResult<WatchedCompanyRow[]>> {
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    const companies = await searchWatchedCompanies(supabase, query, 25);
+    return { ok: true, data: companies };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** Activate/pause a set of catalog companies. */
+export async function setCompaniesActiveAction(
+  companyIds: string[],
+  active: boolean,
+): Promise<ActionResult<{ updated: number }>> {
+  const parsed = z.array(uuidSchema).max(100).safeParse(companyIds);
+  if (!parsed.success) return { ok: false, error: "Invalid company selection." };
+
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+
+  try {
+    const supabase = await createClient();
+    await setCompaniesActive(supabase, parsed.data, active);
+    revalidatePath("/settings");
+    return { ok: true, data: { updated: parsed.data.length } };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Shared helpers for client components                                */
 /* ------------------------------------------------------------------ */
@@ -893,6 +1185,7 @@ export async function fetchJobList(
       clientRating: params.clientRating ? Number(params.clientRating) : undefined,
       skills: params.skills ? JSON.parse(params.skills) : undefined,
       status: params.status as never,
+      profileId: params.profileId || undefined,
       page: params.page ? Number(params.page) : 1,
       sort: params.sort as never,
     });

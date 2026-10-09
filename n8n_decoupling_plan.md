@@ -2,6 +2,8 @@
 > Removes all hard n8n runtime dependencies for the five core features.\
 > Gmail intake stays on hold. All AI work goes through the existing DeepSeek client.
 
+> **Status (done):** Phases 0–6 shipped. In addition, per-persona master CV upload + autofill (`19_persona_cv.sql`), multi-persona scoring with persona badges/filter (`20_multi_persona_scores.sql`), and an **in-app ATS intake** replacing the n8n `05_ats_intake.json` workflow (`21_ats_scrape.sql`, `src/lib/services/atsIntake.ts`, `/api/intake/run`, Vercel Cron via `vercel.json`, manual "Run intake" in Settings). A job-detail **Application kit** now generates a tailored CV and cover letter on demand. See `README.md` for the current architecture. The SQL snippets below are historical; migrations are the source of truth.
+
 ---
 
 ## Current State Audit

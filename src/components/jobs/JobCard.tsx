@@ -52,6 +52,29 @@ export function JobCard({ job }: { job: JobFeedRow }) {
         </div>
       )}
 
+      {job.persona_scores && job.persona_scores.length > 0 && (
+        <div className={styles.personaRow}>
+          {job.persona_scores.map((persona) => (
+            <span
+              key={persona.profile_id}
+              className={`${styles.personaChip} ${
+                persona.recommendation === "APPLY"
+                  ? styles.personaChipApply
+                  : persona.recommendation === "REVIEW"
+                    ? styles.personaChipReview
+                    : styles.personaChipSkip
+              }`}
+              title={`${persona.label ?? "Persona"} — ${persona.recommendation}`}
+            >
+              {persona.label ?? "Persona"}
+              <span className={styles.personaChipScore}>
+                {Number(persona.score_total).toFixed(1)}
+              </span>
+            </span>
+          ))}
+        </div>
+      )}
+
       <h3 className={styles.title}>
         <Link href={`/jobs/${job.id}`} className={styles.titleLink}>
           {job.title}

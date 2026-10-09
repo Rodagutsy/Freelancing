@@ -2,9 +2,11 @@ import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { listJobs } from "@/lib/services/jobs";
+import { getProfiles } from "@/lib/services/settings";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { FilterBar } from "@/components/jobs/FilterBar";
 import { AddJobButton } from "@/components/jobs/AddJobButton";
+import { BackfillScoresButton } from "@/components/jobs/BackfillScoresButton";
 import { JobCard } from "@/components/jobs/JobCard";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Button } from "@/components/common/Button";
@@ -24,6 +26,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
   }
 
   const supabase = await createClient();
+  const profiles = await getProfiles(supabase);
 
   const page = Math.max(1, Number(params.get("page") ?? 1) || 1);
   const result = await listJobs(supabase, {
@@ -42,6 +45,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
           .filter(Boolean)
       : undefined,
     status: (params.get("status") as never) ?? "all",
+    profileId: params.get("profileId") ?? undefined,
     page,
     limit: 12,
     sort: "score_desc",
@@ -64,13 +68,19 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
         description="Reviewed by your saved-search alerts and scored for fit. Default view: score 7+ within the last 24 hours."
       />
 
-      <FilterBar searchParams={Object.fromEntries(params.entries())} />
+      <FilterBar
+        searchParams={Object.fromEntries(params.entries())}
+        profiles={profiles.map((p) => ({ id: p.id, label: p.label }))}
+      />
 
       <div className={styles.toolbar}>
         <p className={styles.count}>
           {result.total} job{result.total === 1 ? "" : "s"}
         </p>
-        <AddJobButton />
+        <div className={styles.toolbarActions}>
+          <BackfillScoresButton />
+          <AddJobButton />
+        </div>
       </div>
 
       {items.length > 0 ? (

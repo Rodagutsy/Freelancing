@@ -10,6 +10,7 @@ export type ApplicationOutcome =
 
 export interface ProfileRow {
   id: string;
+  user_id: string;
   name: string;
   headline: string;
   bio: string | null;
@@ -26,6 +27,9 @@ export interface ProfileRow {
   pillar: "design" | "build" | "automation" | "growth" | null;
   is_default: boolean;
   sort_order: number;
+  master_cv_text: string | null;
+  master_cv_filename: string | null;
+  master_cv_uploaded_at: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -77,6 +81,7 @@ export interface ScoreFactor {
 
 export interface JobScoreRow {
   id: string;
+  user_id: string;
   job_id: string;
   profile_id: string;
   score_total: number;
@@ -129,17 +134,32 @@ export type WatchedCompanyPlatform =
 
 export interface WatchedCompanyRow {
   id: string;
+  user_id: string;
   name: string;
   platform: WatchedCompanyPlatform;
   board_token: string | null;
   careers_url: string;
   region: "us" | "eu";
   active: boolean;
+  last_polled_at: string | null;
+  last_status: string | null;
+  last_jobs_found: number | null;
+  last_error: string | null;
   created_at: string;
   updated_at: string;
 }
 
-/** Joined view: job + latest score + latest proposal. */
+/** One persona's latest score for a job (from job_feed.persona_scores). */
+export interface PersonaScore {
+  profile_id: string;
+  label: string | null;
+  pillar: "design" | "build" | "automation" | "growth" | null;
+  score_total: number;
+  recommendation: Recommendation;
+  confidence: number;
+}
+
+/** Joined view: job + best score across personas + latest proposal. */
 export interface JobFeedRow extends JobRow {
   score_id: string | null;
   score_total: number | null;
@@ -149,6 +169,8 @@ export interface JobFeedRow extends JobRow {
   factors: ScoreFactor | null;
   score_created_at: string | null;
   score_profile_id: string | null;
+  persona_scores: PersonaScore[] | null;
+  persona_score_count: number;
   proposal_id: string | null;
   proposal_draft_text: string | null;
   proposal_angle: string | null;

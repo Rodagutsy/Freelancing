@@ -95,10 +95,15 @@ export const authRateRules = {
 export const aiRateRules = {
   proposal: { limit: 10, windowMs: 60 * 60 * 1000 },
   rescore: { limit: 10, windowMs: 60 * 60 * 1000 },
+  /** Scoring a job against every persona in one shot. */
+  scoreAll: { limit: 15, windowMs: 60 * 60 * 1000 },
   draft: { limit: 10, windowMs: 60 * 60 * 1000 },
   revise: { limit: 10, windowMs: 60 * 60 * 1000 },
   pitch: { limit: 10, windowMs: 60 * 60 * 1000 },
   qa: { limit: 10, windowMs: 60 * 60 * 1000 },
   coverLetter: { limit: 10, windowMs: 60 * 60 * 1000 },
+  tailoredCv: { limit: 10, windowMs: 60 * 60 * 1000 },
   resume: { limit: 3, windowMs: 60 * 60 * 1000 },
+  /** Manual "run intake now" scrapes. */
+  atsRun: { limit: 12, windowMs: 60 * 60 * 1000 },
 } as const;

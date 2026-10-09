@@ -2,6 +2,7 @@ import { matchSkills, type SkillMatch } from "@/lib/skillMatch";
 import type {
   DatabaseClient,
   JobFeedRow,
+  PersonaScore,
   PortfolioProjectRow,
   Recommendation,
 } from "@/lib/types";
@@ -14,6 +15,8 @@ export interface JobListQuery {
   clientRating?: number;
   skills?: string[];
   status?: "apply" | "review" | "skip" | "all";
+  /** Restrict to jobs that have a score for this persona. */
+  profileId?: string;
   page?: number;
   limit?: number;
   sort?: "score_desc" | "newest";
@@ -49,8 +52,27 @@ export async function listJobs(
   const band = STATUS_BANDS[query.status ?? "all"] ?? null;
   const min = query.scoreMin ?? band?.min;
   const max = query.scoreMax ?? band?.max;
-  if (min !== undefined) q = q.gte("score_total", min);
-  if (max !== undefined) q = q.lte("score_total", max);
+
+  if (query.profileId) {
+    // Persona filter: resolve the matching job ids from job_persona_scores,
+    // applying the score band to THAT persona's score (not the best score).
+    let ps = client
+      .from("job_persona_scores")
+      .select("job_id")
+      .eq("profile_id", query.profileId);
+    if (min !== undefined) ps = ps.gte("score_total", min);
+    if (max !== undefined) ps = ps.lte("score_total", max);
+    const { data: rows, error: idsError } = await ps.limit(1000);
+    if (idsError) throw new Error(idsError.message);
+    const ids = (rows ?? []).map((row) => row.job_id as string);
+    if (ids.length === 0) {
+      return { items: [], total: 0, page, pageCount: 1 };
+    }
+    q = q.in("id", ids);
+  } else {
+    if (min !== undefined) q = q.gte("score_total", min);
+    if (max !== undefined) q = q.lte("score_total", max);
+  }
 
   if (query.postedHours && query.postedHours > 0) {
     const cutoff = new Date(
@@ -110,6 +132,47 @@ export async function getJobDetail(
     throw new Error(error.message);
   }
   return (data as JobFeedRow | null) ?? null;
+}
+
+/** Latest score per persona for one job (from the JSONB breakdown). */
+export function personaScoresForJob(job: JobFeedRow): PersonaScore[] {
+  return job.persona_scores ?? [];
+}
+
+/**
+ * Jobs that don't yet have a score for every persona (or have none at all).
+ * Returns the ids newest-first, capped at `limit`.
+ */
+export async function listJobsMissingScores(
+  client: DatabaseClient,
+  personaCount: number,
+  limit = 50,
+): Promise<string[]> {
+  if (personaCount <= 0) return [];
+
+  const [{ data: jobs, error: jobsError }, { data: scores, error: scoresError }] =
+    await Promise.all([
+      client
+        .from("jobs")
+        .select("id, posted_at")
+        .order("posted_at", { ascending: false })
+        .limit(500),
+      client.from("job_persona_scores").select("job_id"),
+    ]);
+
+  if (jobsError) throw new Error(jobsError.message);
+  if (scoresError) throw new Error(scoresError.message);
+
+  const counts = new Map<string, number>();
+  for (const row of scores ?? []) {
+    const id = row.job_id as string;
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+
+  return (jobs ?? [])
+    .filter((job) => (counts.get(job.id as string) ?? 0) < personaCount)
+    .slice(0, limit)
+    .map((job) => job.id as string);
 }
 
 const STRENGTH_RANK: Record<PortfolioProjectRow["strength"], number> = {

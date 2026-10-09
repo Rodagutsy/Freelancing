@@ -1,11 +1,13 @@
 import { Mail, Database, Workflow, Cpu } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getProfiles } from "@/lib/services/settings";
-import { listWatchedCompanies } from "@/lib/services/watchedCompanies";
+import {
+  countWatchedCompanies,
+  listActiveWatchedCompanies,
+} from "@/lib/services/watchedCompanies";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatusBadge } from "@/components/common/StatusBadge";
 import { PersonaManager } from "@/components/settings/PersonaManager";
-import { ResumeUpload } from "@/components/settings/ResumeUpload";
 import { WatchedCompanies } from "@/components/settings/WatchedCompanies";
 import styles from "./page.module.css";
 
@@ -13,9 +15,10 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const [profiles, watchedCompanies] = await Promise.all([
+  const [profiles, watchedCompanies, catalogCount] = await Promise.all([
     getProfiles(supabase),
-    listWatchedCompanies(supabase),
+    listActiveWatchedCompanies(supabase),
+    countWatchedCompanies(supabase),
   ]);
 
   const supabaseConfigured = Boolean(
@@ -72,38 +75,27 @@ export default async function SettingsPage() {
         </h2>
         <p className={styles.sectionHint}>
           Each persona is a separate positioning (label, headline, bio, services,
-          rates, links). New jobs are scored automatically against the{" "}
-          <strong>default</strong> persona; on any job you can re-score or draft
-          with another one. Portfolio projects are shared across all personas.
+          rates, links) plus an optional master CV used for tailored CVs. New
+          jobs are scored automatically against <strong>every</strong> persona.
+          Portfolio projects are shared across all personas.
         </p>
         <PersonaManager profiles={profiles} />
       </section>
-
-      {profiles.length > 0 && (
-        <section className={styles.section} aria-labelledby="resume-heading">
-          <h2 id="resume-heading" className={styles.sectionTitle}>
-            Resume import
-          </h2>
-          <p className={styles.sectionHint}>
-            Upload a resume (PDF or text) and the AI fills in your persona
-            fields. You review every value before it is saved — nothing is
-            written automatically.
-          </p>
-          <ResumeUpload profiles={profiles} />
-        </section>
-      )}
 
       <section className={styles.section} aria-labelledby="watched-heading">
         <h2 id="watched-heading" className={styles.sectionTitle}>
           Watched Companies
         </h2>
         <p className={styles.sectionHint}>
-          Companies whose public career boards are polled every 6 hours by the
-          n8n ATS intake workflow. New jobs matching your 4-pillar keywords are
-          auto-imported and scored. Paste any careers URL — the system detects
-          the ATS platform automatically.
+          Companies whose public career boards are polled. New jobs matching your
+          4-pillar keywords are auto-imported and scored. Search the{" "}
+          {catalogCount.toLocaleString()}-company catalog below to activate more,
+          or run a one-off poll now.
         </p>
-        <WatchedCompanies companies={watchedCompanies} />
+        <WatchedCompanies
+          companies={watchedCompanies}
+          catalogCount={catalogCount}
+        />
       </section>
 
       <section className={styles.section} aria-labelledby="intake-heading">

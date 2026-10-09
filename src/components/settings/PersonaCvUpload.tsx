@@ -2,32 +2,30 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileText, LoaderCircle, Upload, X } from "lucide-react";
-import { saveProfile } from "@/app/actions";
+import { FileText, LoaderCircle, Trash2, Upload, X } from "lucide-react";
+import { clearPersonaCvAction, saveProfile } from "@/app/actions";
 import type { ProfileRow } from "@/lib/types";
 import type { ResumeExtract, ResumeExtractField } from "@/lib/schemas/resume";
 import { Button } from "@/components/common/Button";
-import { FormField } from "@/components/common/FormField";
 import { useToast } from "@/components/common/Toast";
 import { cn } from "@/lib/utils";
-import fieldStyles from "@/components/common/fields.module.css";
 import styles from "./ResumeUpload.module.css";
 
 interface ExtractedField {
   field: ResumeExtractField;
   label: string;
   value: string;
-  /** True when the user unticked this field in the preview. */
   skipped: boolean;
 }
 
 interface ResumeResponse {
   extract: ResumeExtract;
   fields: ExtractedField[];
+  saved?: boolean;
 }
 
-interface ResumeUploadProps {
-  profiles: ProfileRow[];
+interface PersonaCvUploadProps {
+  profile: ProfileRow;
 }
 
 function listValue(value: string): string[] {
@@ -37,8 +35,6 @@ function listValue(value: string): string[] {
     .filter(Boolean);
 }
 
-/** Merges extracted values into a persona. Skills are a hint only — they are
- *  not a profile field, so they are shown but never written. */
 function mergeIntoProfile(
   profile: ProfileRow,
   applied: Map<ResumeExtractField, string>,
@@ -72,24 +68,24 @@ function mergeIntoProfile(
   };
 }
 
-export function ResumeUpload({ profiles }: ResumeUploadProps) {
+/**
+ * Per-persona master CV: upload a file, keep its text on the persona, and
+ * optionally auto-fill the persona's fields from what the AI extracted.
+ */
+export function PersonaCvUpload({ profile }: PersonaCvUploadProps) {
   const router = useRouter();
   const { toast } = useToast();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const [fileName, setFileName] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fields, setFields] = useState<ExtractedField[] | null>(null);
-  const [personaId, setPersonaId] = useState<string>(
-    profiles.find((p) => p.is_default)?.id ?? profiles[0]?.id ?? "",
-  );
 
   function reset() {
     setFields(null);
-    setFileName(null);
     setError(null);
     if (inputRef.current) inputRef.current.value = "";
   }
@@ -97,17 +93,14 @@ export function ResumeUpload({ profiles }: ResumeUploadProps) {
   async function upload(file: File) {
     setError(null);
     setFields(null);
-    setFileName(file.name);
 
     const body = new FormData();
     body.append("file", file);
+    body.append("personaId", profile.id);
 
     setParsing(true);
     try {
-      const response = await fetch("/api/resume", {
-        method: "POST",
-        body,
-      });
+      const response = await fetch("/api/resume", { method: "POST", body });
       const payload = (await response.json()) as
         | ResumeResponse
         | { error?: string };
@@ -115,14 +108,21 @@ export function ResumeUpload({ profiles }: ResumeUploadProps) {
       if (!response.ok || !("fields" in payload)) {
         setError(
           ("error" in payload && payload.error) ||
-            "Couldn't read that resume. Try again or paste the text.",
+            "Couldn't read that CV. Try again or upload a .txt.",
         );
         return;
       }
 
+      if (payload.saved) {
+        toast(`Master CV saved to ${profile.label}.`, "success");
+        router.refresh();
+      }
+
       if (payload.fields.length === 0) {
         setError(
-          "Nothing confident enough to extract. Try a resume with more detail.",
+          payload.saved
+            ? "Master CV saved, but nothing confident enough to auto-fill. Edit the persona manually."
+            : "Nothing confident enough to extract. Try a CV with more detail.",
         );
         return;
       }
@@ -138,19 +138,14 @@ export function ResumeUpload({ profiles }: ResumeUploadProps) {
     setFields((prev) =>
       prev === null
         ? prev
-        : prev.map((f) => (f.field === field ? { ...f, skipped: !f.skipped } : f)),
+        : prev.map((f) =>
+            f.field === field ? { ...f, skipped: !f.skipped } : f,
+          ),
     );
   }
 
   async function apply() {
-    if (!fields || !personaId) return;
-    const profile = profiles.find((p) => p.id === personaId);
-    if (!profile) {
-      setError("That persona no longer exists. Pick another one.");
-      return;
-    }
-
-    // skills is a portfolio hint, not a profile column — keep it out of the write.
+    if (!fields) return;
     const applied = new Map(
       fields
         .filter((f) => !f.skipped)
@@ -163,7 +158,7 @@ export function ResumeUpload({ profiles }: ResumeUploadProps) {
     setApplying(false);
 
     if (result.ok) {
-      toast(`${profile.label} updated from your resume.`, "success");
+      toast(`${profile.label} updated from its CV.`, "success");
       reset();
       router.refresh();
     } else {
@@ -171,16 +166,48 @@ export function ResumeUpload({ profiles }: ResumeUploadProps) {
     }
   }
 
+  async function clearCv() {
+    setClearing(true);
+    const result = await clearPersonaCvAction(profile.id);
+    setClearing(false);
+    if (result.ok) {
+      toast("Master CV removed.", "success");
+      reset();
+      router.refresh();
+    } else {
+      toast(result.error ?? "Could not remove the CV.", "error");
+    }
+  }
+
   const appliedCount =
     fields?.filter((f) => !f.skipped && f.field !== "skills").length ?? 0;
+  const hasCv = Boolean(profile.master_cv_text);
 
   return (
     <div className={styles.wrap}>
       <p className={styles.hint}>
-        Upload a resume and review what the AI found before anything is saved.
-        Applied fields overwrite the persona you pick below — skills are shown
-        as a hint for adding portfolio projects, not written anywhere.
+        Upload this persona&apos;s master CV. Its text powers per-job tailored CV
+        generation, and the AI can auto-fill the fields below. Review before
+        applying — applied values overwrite this persona.
       </p>
+
+      {hasCv && (
+        <div className={styles.status}>
+          <FileText className={styles.actionIcon} aria-hidden />
+          <span>
+            Current: <strong>{profile.master_cv_filename ?? "master-cv"}</strong>
+          </span>
+          <Button
+            variant="destructive"
+            size="sm"
+            loading={clearing}
+            onClick={() => void clearCv()}
+          >
+            <Trash2 className={styles.actionIcon} aria-hidden />
+            Remove
+          </Button>
+        </div>
+      )}
 
       <div
         className={cn(styles.dropzone, dragging && styles.dropzoneActive)}
@@ -205,11 +232,11 @@ export function ResumeUpload({ profiles }: ResumeUploadProps) {
             const file = event.target.files?.[0];
             if (file) void upload(file);
           }}
-          aria-label="Resume file"
+          aria-label={`Master CV for ${profile.label}`}
         />
         <FileText className={styles.dropIcon} aria-hidden />
         <p className={styles.dropTitle}>
-          {fileName ?? "Drop a resume here, or choose a file"}
+          {hasCv ? "Replace with a new CV" : "Drop a CV here, or choose a file"}
         </p>
         <p className={styles.dropHint}>
           PDF or .txt, up to 2 MB. Scanned image-only PDFs can&apos;t be read.
@@ -221,14 +248,14 @@ export function ResumeUpload({ profiles }: ResumeUploadProps) {
           loading={parsing}
         >
           <Upload className={styles.actionIcon} aria-hidden />
-          {parsing ? "Reading resume…" : "Choose file"}
+          {parsing ? "Reading CV…" : "Choose file"}
         </Button>
       </div>
 
       {parsing && (
         <p className={styles.status} role="status">
           <LoaderCircle className={styles.spinIcon} aria-hidden />
-          Extracting your profile details — this takes a few seconds.
+          Uploading and extracting this persona&apos;s details…
         </p>
       )}
 
@@ -245,7 +272,7 @@ export function ResumeUpload({ profiles }: ResumeUploadProps) {
               We found {fields.length} field{fields.length === 1 ? "" : "s"}
             </h3>
             <p className={styles.previewHint}>
-              Untick anything you don&apos;t want, then apply.
+              Untick anything you don&apos;t want, then apply to {profile.label}.
             </p>
           </div>
 
@@ -264,27 +291,6 @@ export function ResumeUpload({ profiles }: ResumeUploadProps) {
               </li>
             ))}
           </ul>
-
-          <FormField
-            label="Apply to persona"
-            htmlFor="resume-persona"
-            hint="Extracted values overwrite this persona's fields."
-          >
-            <select
-              id="resume-persona"
-              className={fieldStyles.input}
-              value={personaId}
-              onChange={(event) => setPersonaId(event.target.value)}
-              disabled={applying}
-            >
-              {profiles.map((persona) => (
-                <option key={persona.id} value={persona.id}>
-                  {persona.label}
-                  {persona.is_default ? " (default)" : ""}
-                </option>
-              ))}
-            </select>
-          </FormField>
 
           <div className={styles.actions}>
             <Button variant="secondary" onClick={reset} disabled={applying}>

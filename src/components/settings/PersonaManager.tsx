@@ -24,6 +24,7 @@ import { StatusBadge } from "@/components/common/StatusBadge";
 import { useToast } from "@/components/common/Toast";
 import fieldStyles from "@/components/common/fields.module.css";
 import { ProfileForm } from "./ProfileForm";
+import { PersonaCvUpload } from "./PersonaCvUpload";
 import styles from "./PersonaManager.module.css";
 
 interface PersonaManagerProps {
@@ -159,6 +160,7 @@ export function PersonaManager({ profiles }: PersonaManagerProps) {
 
               {expanded && (
                 <div className={styles.editor}>
+                  <PersonaCvUpload profile={persona} />
                   <ProfileForm profile={persona} />
                 </div>
               )}

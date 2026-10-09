@@ -6,11 +6,15 @@ import type {
 
 export async function listPortfolioProjects(
   client: DatabaseClient,
+  userId?: string,
 ): Promise<PortfolioProjectRow[]> {
-  const { data, error } = await client
+  let query = client
     .from("portfolio_projects")
     .select("*")
     .order("created_at", { ascending: false });
+  if (userId) query = query.eq("user_id", userId);
+
+  const { data, error } = await query;
 
   if (error) {
     throw new Error(error.message);

@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { errorResponse } from "@/lib/api";
-import { requireUser } from "@/lib/supabase/server";
+import { createClient, requireUser } from "@/lib/supabase/server";
 import { aiRateRules, checkRateLimit } from "@/lib/security/rateLimit";
 import {
   RESUME_MAX_FILE_BYTES,
+  RESUME_MAX_TEXT_CHARS,
   resumeFieldsPresent,
 } from "@/lib/schemas/resume";
 import { parseResume } from "@/lib/services/resumeParser";
+import { savePersonaCv } from "@/lib/services/personaCv";
 
 export const runtime = "nodejs";
 /** PDF extraction plus an AI round-trip needs more than the default budget. */
@@ -16,6 +19,8 @@ export const maxDuration = 60;
 const RESUME_RATE_RULE = aiRateRules.resume;
 
 const TEXT_EXTENSIONS = [".txt", ".md", ".text"];
+
+const personaIdSchema = z.string().uuid();
 
 function isPdf(file: File): boolean {
   return (
@@ -87,9 +92,28 @@ export async function POST(request: Request) {
       : await file.text();
 
     const extract = await parseResume(text);
+
+    // Persist the master CV on the chosen persona (best-effort: extraction is
+    // still returned even if storage fails, e.g. a pre-19 database).
+    const personaId = form.get("personaId");
+    let saved = false;
+    if (typeof personaId === "string" && personaIdSchema.safeParse(personaId).success) {
+      try {
+        const supabase = await createClient();
+        await savePersonaCv(supabase, personaId, {
+          text: text.slice(0, RESUME_MAX_TEXT_CHARS),
+          filename: file.name,
+        });
+        saved = true;
+      } catch {
+        saved = false;
+      }
+    }
+
     return NextResponse.json({
       extract,
       fields: resumeFieldsPresent(extract),
+      saved,
     });
   } catch (error) {
     return errorResponse(error);

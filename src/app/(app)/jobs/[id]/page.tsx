@@ -17,6 +17,8 @@ import { getDefaultProfile, getProfiles } from "@/lib/services/settings";
 import { formatCurrencyRange, formatPosted } from "@/lib/utils";
 import { JobDecisionPanel } from "@/components/jobs/JobDecisionPanel";
 import { ScoreBreakdown } from "@/components/jobs/ScoreBreakdown";
+import { PersonaScoresPanel } from "@/components/jobs/PersonaScoresPanel";
+import { ApplicationKit } from "@/components/jobs/ApplicationKit";
 import { EvidenceCard } from "@/components/jobs/EvidenceCard";
 import { ProposalEditor } from "@/components/proposals/ProposalEditor";
 import { ApplicationQA } from "@/components/jobs/ApplicationQA";
@@ -166,6 +168,17 @@ export default async function JobDetailPage({
             )}
           </section>
 
+          <section className={styles.section} aria-labelledby="persona-scores">
+            <h2 id="persona-scores" className={styles.sectionTitle}>
+              Scores by persona
+            </h2>
+            <PersonaScoresPanel
+              jobId={feed.id}
+              scores={feed.persona_scores ?? []}
+              activeProfileId={feed.score_profile_id}
+            />
+          </section>
+
           <section className={styles.section} aria-labelledby="requirements">
             <h2 id="requirements" className={styles.sectionTitle}>
               Job requirements
@@ -250,6 +263,18 @@ export default async function JobDetailPage({
                   : null
               }
               canGenerate={canGenerate}
+              profiles={personaOptions}
+              defaultPersonaId={draftPersonaId}
+            />
+          </section>
+
+          <section className={styles.section} aria-labelledby="application-kit">
+            <h2 id="application-kit" className={styles.sectionTitle}>
+              Application kit
+            </h2>
+            <ApplicationKit
+              jobId={feed.id}
+              jobTitle={feed.title}
               profiles={personaOptions}
               defaultPersonaId={draftPersonaId}
             />
