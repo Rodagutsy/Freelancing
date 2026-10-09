@@ -72,18 +72,34 @@ export async function listWatchedCompanies(
   return (data ?? []) as WatchedCompanyRow[];
 }
 
-/** Only the companies currently being polled (keeps the settings list small). */
+/** Only the companies currently being polled (paged so large lists stay cheap). */
 export async function listActiveWatchedCompanies(
   client: DatabaseClient,
+  options: { limit?: number; offset?: number } = {},
 ): Promise<WatchedCompanyRow[]> {
+  const limit = options.limit ?? 50;
+  const offset = options.offset ?? 0;
   const { data, error } = await client
     .from("watched_companies")
     .select("*")
     .eq("active", true)
-    .order("name", { ascending: true });
+    .order("name", { ascending: true })
+    .range(offset, offset + limit - 1);
 
   if (error) throw new Error(error.message);
   return (data ?? []) as WatchedCompanyRow[];
+}
+
+/** Number of companies currently being polled. */
+export async function countActiveWatchedCompanies(
+  client: DatabaseClient,
+): Promise<number> {
+  const { count, error } = await client
+    .from("watched_companies")
+    .select("*", { count: "exact", head: true })
+    .eq("active", true);
+  if (error) throw new Error(error.message);
+  return count ?? 0;
 }
 
 export async function countWatchedCompanies(

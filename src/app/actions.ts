@@ -41,6 +41,7 @@ import {
 import {
   addWatchedCompany,
   deleteWatchedCompany,
+  listActiveWatchedCompanies,
   searchWatchedCompanies,
   setCompaniesActive,
   toggleWatchedCompany,
@@ -1137,6 +1138,25 @@ export async function searchCompaniesAction(
   try {
     const supabase = await createClient();
     const companies = await searchWatchedCompanies(supabase, query, 25);
+    return { ok: true, data: companies };
+  } catch (error) {
+    return fail(error);
+  }
+}
+
+/** Loads the next page of active watched companies for the "Show more" button. */
+export async function listWatchedCompaniesPageAction(
+  offset: number,
+): Promise<ActionResult<WatchedCompanyRow[]>> {
+  const user = await requireUser();
+  if (!user) return { ok: false, error: "You must be signed in." };
+  if (!Number.isFinite(offset) || offset < 0) {
+    return { ok: false, error: "Invalid offset." };
+  }
+
+  try {
+    const supabase = await createClient();
+    const companies = await listActiveWatchedCompanies(supabase, { offset });
     return { ok: true, data: companies };
   } catch (error) {
     return fail(error);

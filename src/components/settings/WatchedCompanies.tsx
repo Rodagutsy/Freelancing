@@ -6,6 +6,7 @@ import { Globe, Pause, Play, Plus, RefreshCw, Search, Trash2 } from "lucide-reac
 import {
   addWatchedCompanyAction,
   deleteWatchedCompanyAction,
+  listWatchedCompaniesPageAction,
   runAdminIntakeAction,
   runAtsIntakeAction,
   searchCompaniesAction,
@@ -20,6 +21,7 @@ import styles from "./WatchedCompanies.module.css";
 
 interface WatchedCompaniesProps {
   companies: WatchedCompanyRow[];
+  activeCount: number;
   catalogCount: number;
 }
 
@@ -41,7 +43,11 @@ function lastPollLabel(company: WatchedCompanyRow): string {
   return `last polled ${when} · ${found} match${found === 1 ? "" : "es"}`;
 }
 
-export function WatchedCompanies({ companies, catalogCount }: WatchedCompaniesProps) {
+export function WatchedCompanies({
+  companies,
+  activeCount,
+  catalogCount,
+}: WatchedCompaniesProps) {
   const router = useRouter();
   const { toast } = useToast();
 
@@ -56,6 +62,16 @@ export function WatchedCompanies({ companies, catalogCount }: WatchedCompaniesPr
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [results, setResults] = useState<WatchedCompanyRow[] | null>(null);
+  const [shown, setShown] = useState<WatchedCompanyRow[]>(companies);
+  const [prevCompanies, setPrevCompanies] = useState(companies);
+  const [loadingMore, setLoadingMore] = useState(false);
+
+  if (prevCompanies !== companies) {
+    setPrevCompanies(companies);
+    setShown(companies);
+  }
+
+  const hasMore = shown.length < activeCount;
 
   async function handleAdd() {
     const name = newName.trim();
@@ -133,6 +149,19 @@ export function WatchedCompanies({ companies, catalogCount }: WatchedCompaniesPr
     }
   }
 
+  async function handleLoadMore() {
+    if (loadingMore) return;
+    setLoadingMore(true);
+    const result = await listWatchedCompaniesPageAction(shown.length);
+    setLoadingMore(false);
+    if (result.ok && result.data) {
+      const page = result.data;
+      setShown((prev) => [...prev, ...page]);
+    } else {
+      toast(result.error ?? "Could not load more companies.", "error");
+    }
+  }
+
   async function handleSearch() {
     setSearching(true);
     const result = await searchCompaniesAction(query);
@@ -161,7 +190,8 @@ export function WatchedCompanies({ companies, catalogCount }: WatchedCompaniesPr
     <div className={styles.wrap}>
       <div className={styles.toolbar}>
         <span className={styles.meta}>
-          {companies.length} active · {catalogCount.toLocaleString()} in catalog
+          {shown.length.toLocaleString()} of {activeCount.toLocaleString()} active ·{" "}
+          {catalogCount.toLocaleString()} in catalog
         </span>
         <Button
           variant="secondary"
@@ -184,9 +214,9 @@ export function WatchedCompanies({ companies, catalogCount }: WatchedCompaniesPr
         </Button>
       </div>
 
-      {companies.length > 0 ? (
+      {shown.length > 0 ? (
         <div className={styles.list}>
-          {companies.map((c) => (
+          {shown.map((c) => (
             <div key={c.id} className={styles.row}>
               <div className={styles.rowMain}>
                 <Globe className={styles.globeIcon} aria-hidden />
@@ -231,6 +261,19 @@ export function WatchedCompanies({ companies, catalogCount }: WatchedCompaniesPr
           No companies being watched. Search the catalog below to activate some,
           or add a careers URL manually.
         </p>
+      )}
+
+      {shown.length > 0 && hasMore && (
+        <div className={styles.loadMore}>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={loadingMore}
+            onClick={() => void handleLoadMore()}
+          >
+            Show more
+          </Button>
+        </div>
       )}
 
       <div className={styles.catalog}>

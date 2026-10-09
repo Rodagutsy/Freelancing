@@ -2,6 +2,7 @@ import { Mail, Database, Workflow, Cpu } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { getProfiles } from "@/lib/services/settings";
 import {
+  countActiveWatchedCompanies,
   countWatchedCompanies,
   listActiveWatchedCompanies,
 } from "@/lib/services/watchedCompanies";
@@ -15,11 +16,13 @@ export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
   const supabase = await createClient();
-  const [profiles, watchedCompanies, catalogCount] = await Promise.all([
-    getProfiles(supabase),
-    listActiveWatchedCompanies(supabase),
-    countWatchedCompanies(supabase),
-  ]);
+  const [profiles, watchedCompanies, activeCount, catalogCount] =
+    await Promise.all([
+      getProfiles(supabase),
+      listActiveWatchedCompanies(supabase),
+      countActiveWatchedCompanies(supabase),
+      countWatchedCompanies(supabase),
+    ]);
 
   const supabaseConfigured = Boolean(
     process.env.NEXT_PUBLIC_SUPABASE_URL &&
@@ -94,6 +97,7 @@ export default async function SettingsPage() {
         </p>
         <WatchedCompanies
           companies={watchedCompanies}
+          activeCount={activeCount}
           catalogCount={catalogCount}
         />
       </section>
