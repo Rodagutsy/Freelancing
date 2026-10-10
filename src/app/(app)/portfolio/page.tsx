@@ -19,7 +19,7 @@ export default async function PortfolioPage() {
     <div>
       <PageHeader
         title="Portfolio"
-        description="Verified evidence the AI is allowed to reference. The can-claim text is the only fact the proposal generator may use."
+        description="Verified evidence the AI may cite in proposals."
         action={<PortfolioAddButton />}
       />
 

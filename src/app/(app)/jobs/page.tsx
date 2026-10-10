@@ -29,10 +29,17 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
   const profiles = await getProfiles(supabase);
 
   const page = Math.max(1, Number(params.get("page") ?? 1) || 1);
+  const status = (params.get("status") as "apply" | "review" | "skip" | "all") ?? "all";
+  const scoreParam = params.get("score");
+  const postedParam = params.get("posted");
+  // Explicit score wins; otherwise the default 7–10 band only applies to the
+  // unfiltered view so the status (Apply/Review/Skip) filter is not overridden.
+  const scoreMin = scoreParam !== null ? Number(scoreParam) : status === "all" ? 7 : undefined;
+  const scoreMax = scoreParam !== null ? 10 : status === "all" ? 10 : undefined;
   const result = await listJobs(supabase, {
-    scoreMin: params.get("score") ? Number(params.get("score")) : 7,
-    scoreMax: 10,
-    postedHours: params.get("posted") ? Number(params.get("posted")) : 24,
+    scoreMin,
+    scoreMax,
+    postedHours: postedParam !== null ? Number(postedParam) : 24,
     budgetMin: params.get("budget") ? Number(params.get("budget")) : undefined,
     clientRating: params.get("rating")
       ? Number(params.get("rating"))
@@ -44,7 +51,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
           .map((s) => s.trim())
           .filter(Boolean)
       : undefined,
-    status: (params.get("status") as never) ?? "all",
+    status,
     profileId: params.get("profileId") ?? undefined,
     page,
     limit: 12,
@@ -65,7 +72,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
     <div>
       <PageHeader
         title="Jobs"
-        description="Reviewed by your saved-search alerts and scored for fit. Default view: score 7+ within the last 24 hours."
+        description="Fit-scored jobs from your saved searches and watched boards."
       />
 
       <FilterBar

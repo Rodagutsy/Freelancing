@@ -44,7 +44,7 @@ export default async function ApplicationsPage() {
     <div>
       <PageHeader
         title="Applications"
-        description="Track what you applied to, log outcomes, and learn which jobs convert."
+        description="Track applications, outcomes, and what converts."
       />
 
       {hasAnalytics && (

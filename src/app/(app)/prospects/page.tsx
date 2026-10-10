@@ -48,7 +48,7 @@ export default async function ProspectsPage({
     <div>
       <PageHeader
         title="Prospects"
-        description="Track businesses you're targeting. Link audits to build evidence-based pitches."
+        description="Businesses you're targeting and the audits behind them."
         action={<ProspectAddButton />}
       />
 

@@ -58,7 +58,7 @@ export default async function OutboundsPage({
     <div>
       <PageHeader
         title="Outreach"
-        description="AI-drafted email sequences for your prospects. Review and approve before anything is sent."
+        description="AI-drafted sequences to review before anything sends."
       />
 
       <div className={styles.toolbar}>

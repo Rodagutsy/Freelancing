@@ -8,6 +8,10 @@ import type {
 } from "@/lib/types";
 import { getProfilesForUser } from "@/lib/services/settings";
 import { scoreJobForAllPersonas } from "@/lib/services/scoring";
+import {
+  remainingScoreBudget,
+  weeklyScoreLimit,
+} from "@/lib/services/scoringBudget";
 
 /** A job scraped from an ATS board, before it is normalized into `jobs`. */
 export interface AtsJob {
@@ -26,6 +30,10 @@ export interface AtsIntakeSummary {
   jobsScored: number;
   errors: Array<{ company: string; error: string }>;
   capped: boolean;
+  /** True when new jobs were imported but left unscored (weekly budget spent). */
+  scoresCapped: boolean;
+  /** Weekly DeepSeek scoring calls still available at the end of the run. */
+  scoreBudgetRemaining: number;
 }
 
 function stripHtml(value: unknown): string {

@@ -48,7 +48,7 @@ export default async function SuppressedPage({
     <div>
       <PageHeader
         title="Blocklist"
-        description="Contacts that must not be emailed (unsubscribed, abuse, bounce, or legal). These are enforced at draft and at send."
+        description="Contacts that must never be emailed."
       />
 
       <section className={styles.section} aria-labelledby="add-heading">

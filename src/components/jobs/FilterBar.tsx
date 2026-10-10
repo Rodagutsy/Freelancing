@@ -39,6 +39,7 @@ const POSTED_OPTIONS = [
   { value: "24", label: "Last 24 hours" },
   { value: "48", label: "Last 48 hours" },
   { value: "168", label: "Last 7 days" },
+  { value: "0", label: "Any time" },
 ];
 
 const BUDGET_OPTIONS = [
@@ -102,8 +103,8 @@ export function FilterBar({ searchParams, profiles }: FilterBarProps) {
   const commit = useCallback(
     (next: FilterState) => {
       const params = new URLSearchParams();
-      if (next.score !== "0") params.set("score", next.score);
-      if (next.posted !== "24") params.set("posted", next.posted);
+      if (next.score !== DEFAULT_FILTERS.score) params.set("score", next.score);
+      if (next.posted !== DEFAULT_FILTERS.posted) params.set("posted", next.posted);
       if (next.budget) params.set("budget", next.budget);
       if (next.rating) params.set("rating", next.rating);
       if (next.status !== "all") params.set("status", next.status);

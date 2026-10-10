@@ -8,6 +8,9 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  max-height: 340px;
+  overflow-y: auto;
+  padding-right: var(--space-1);
 }
 
 .row {
@@ -19,6 +22,7 @@
   background: var(--bg-surface);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
+  flex-shrink: 0;
 }
 
 .rowMain {

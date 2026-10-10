@@ -71,6 +71,18 @@ export function MobileNavDrawer({ open, onClose }: MobileNavDrawerProps) {
         </nav>
 
         <div className={styles.footer}>
+          <Link
+            href={SETTINGS_ITEM.href}
+            className={cn(styles.item, isActive(SETTINGS_ITEM.href) && styles.itemActive)}
+            aria-current={isActive(SETTINGS_ITEM.href) ? "page" : undefined}
+            onClick={onClose}
+          >
+            <SETTINGS_ITEM.icon
+              className={cn(styles.icon, isActive(SETTINGS_ITEM.href) && styles.iconActive)}
+              aria-hidden
+            />
+            <span>{SETTINGS_ITEM.label}</span>
+          </Link>
           <button
             type="button"
             className={styles.signOut}

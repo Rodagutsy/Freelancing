@@ -16,7 +16,7 @@ export default async function AuditsPage() {
     <div>
       <PageHeader
         title="Website Audits"
-        description="Analyze business websites for UX, performance, accessibility, SEO, and automation opportunities."
+        description="Website audits for UX, performance, SEO, and automation gaps."
         action={<AuditCreateButton />}
       />
 

@@ -44,27 +44,27 @@ export default async function DashboardPage() {
       />
 
       <section className={styles.strip} aria-label="Today's decisions">
-        <div className={styles.stripItem}>
+        <Link href="/jobs?status=apply&score=0&posted=0" className={styles.stripItem}>
           <CircleCheck className={`${styles.stripIcon} ${styles.success}`} aria-hidden />
           <div>
             <p className={styles.stripValue}>{stats.applyToday}</p>
             <p className={styles.stripLabel}>Apply now</p>
           </div>
-        </div>
-        <div className={styles.stripItem}>
+        </Link>
+        <Link href="/jobs?status=review&score=0&posted=0" className={styles.stripItem}>
           <CircleAlert className={`${styles.stripIcon} ${styles.warning}`} aria-hidden />
           <div>
             <p className={styles.stripValue}>{stats.reviewToday}</p>
             <p className={styles.stripLabel}>Review</p>
           </div>
-        </div>
-        <div className={styles.stripItem}>
+        </Link>
+        <Link href="/jobs?status=skip&score=0&posted=0" className={styles.stripItem}>
           <CircleX className={`${styles.stripIcon} ${styles.danger}`} aria-hidden />
           <div>
             <p className={styles.stripValue}>{stats.skipToday}</p>
             <p className={styles.stripLabel}>Skipped today</p>
           </div>
-        </div>
+        </Link>
       </section>
 
       <section className={styles.section} aria-label="Analytics">
@@ -76,22 +76,22 @@ export default async function DashboardPage() {
           </Link>
         </div>
         <div className={styles.metrics}>
-          <div className={styles.metric}>
+          <Link href="/jobs?score=0&posted=0" className={styles.metric}>
             <p className={styles.metricValue}>{stats.jobsAnalyzed}</p>
-            <p className={styles.metricLabel}>Jobs analyzed</p>
-          </div>
-          <div className={styles.metric}>
+            <p className={styles.metricLabel}>Jobs imported</p>
+          </Link>
+          <Link href="/jobs?score=7&posted=0" className={styles.metric}>
             <p className={styles.metricValue}>{stats.highFit}</p>
             <p className={styles.metricLabel}>High-fit jobs</p>
-          </div>
-          <div className={styles.metric}>
+          </Link>
+          <Link href="/applications" className={styles.metric}>
             <p className={styles.metricValue}>{stats.proposalsDrafted}</p>
             <p className={styles.metricLabel}>Proposals drafted</p>
-          </div>
-          <div className={styles.metric}>
+          </Link>
+          <Link href="/applications" className={styles.metric}>
             <p className={styles.metricValue}>{stats.applicationsLogged}</p>
             <p className={styles.metricLabel}>Applications logged</p>
-          </div>
+          </Link>
         </div>
       </section>
 

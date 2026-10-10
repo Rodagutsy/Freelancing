@@ -69,7 +69,7 @@ export default async function SettingsPage() {
     <div>
       <PageHeader
         title="Settings"
-        description="Your profile, intake setup, and integration status."
+        description="Your profile, intake setup, and integrations."
       />
 
       <section className={styles.section} aria-labelledby="profile-heading">
@@ -77,10 +77,7 @@ export default async function SettingsPage() {
           Personas
         </h2>
         <p className={styles.sectionHint}>
-          Each persona is a separate positioning (label, headline, bio, services,
-          rates, links) plus an optional master CV used for tailored CVs. New
-          jobs are scored automatically against <strong>every</strong> persona.
-          Portfolio projects are shared across all personas.
+          Each persona is a separate positioning; jobs are scored against every one.
         </p>
         <PersonaManager profiles={profiles} />
       </section>
@@ -90,10 +87,7 @@ export default async function SettingsPage() {
           Watched Companies
         </h2>
         <p className={styles.sectionHint}>
-          Companies whose public career boards are polled. New jobs matching your
-          4-pillar keywords are auto-imported and scored. Search the{" "}
-          {catalogCount.toLocaleString()}-company catalog below to activate more,
-          or run a one-off poll now.
+          Career boards we poll for new matching jobs.
         </p>
         <WatchedCompanies
           companies={watchedCompanies}
