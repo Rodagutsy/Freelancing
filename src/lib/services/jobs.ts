@@ -19,7 +19,7 @@ export interface JobListQuery {
   profileId?: string;
   page?: number;
   limit?: number;
-  sort?: "score_desc" | "newest";
+  sort?: "score_desc" | "newest" | "ingested";
 }
 
 export interface JobListResult {
@@ -95,7 +95,9 @@ export async function listJobs(
     q = q.overlaps("skills_requested", query.skills);
   }
 
-  if (sort === "newest") {
+  if (sort === "ingested") {
+    q = q.order("ingested_at", { ascending: false });
+  } else if (sort === "newest") {
     q = q.order("posted_at", { ascending: false });
   } else {
     q = q

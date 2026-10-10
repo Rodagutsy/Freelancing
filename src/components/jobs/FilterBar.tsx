@@ -19,8 +19,8 @@ export interface FilterState {
 }
 
 export const DEFAULT_FILTERS: FilterState = {
-  score: "7",
-  posted: "24",
+  score: "0",
+  posted: "0",
   budget: "",
   rating: "",
   status: "all",

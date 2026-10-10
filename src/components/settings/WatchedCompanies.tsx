@@ -121,10 +121,10 @@ export function WatchedCompanies({
     const result = await runAtsIntakeAction();
     setRunning(false);
     if (result.ok && result.data) {
-      const { jobsNew, jobsScored, companiesPolled, capped } = result.data;
+      const { jobsNew, jobsScored, companiesPolled, capped, scoresCapped } = result.data;
       toast(
-        `Polled ${companiesPolled} board${companiesPolled === 1 ? "" : "s"} · ${jobsNew} new job${jobsNew === 1 ? "" : "s"} · ${jobsScored} scored${capped ? " (run capped)" : ""}.`,
-        "success",
+        `Polled ${companiesPolled} board${companiesPolled === 1 ? "" : "s"} · ${jobsNew} new job${jobsNew === 1 ? "" : "s"} · ${jobsScored} scored${capped ? " (run capped)" : ""}.${scoresCapped ? " Weekly scoring budget reached — new jobs saved but not scored." : ""}`,
+        scoresCapped ? "info" : "success",
       );
       router.refresh();
     } else {
@@ -138,10 +138,10 @@ export function WatchedCompanies({
     const result = await runAdminIntakeAction();
     setAdminRunning(false);
     if (result.ok && result.data) {
-      const { jobsNew, jobsScored, companiesPolled, capped } = result.data;
+      const { jobsNew, jobsScored, companiesPolled, capped, scoresCapped } = result.data;
       toast(
-        `Polled ${companiesPolled} board${companiesPolled === 1 ? "" : "s"} across all users · ${jobsNew} new job${jobsNew === 1 ? "" : "s"} · ${jobsScored} scored${capped ? " (run capped)" : ""}.`,
-        "success",
+        `Polled ${companiesPolled} board${companiesPolled === 1 ? "" : "s"} across all users · ${jobsNew} new job${jobsNew === 1 ? "" : "s"} · ${jobsScored} scored${capped ? " (run capped)" : ""}.${scoresCapped ? " Weekly scoring budget reached — new jobs saved but not scored." : ""}`,
+        scoresCapped ? "info" : "success",
       );
       router.refresh();
     } else {

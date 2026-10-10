@@ -292,7 +292,20 @@ export async function runAtsIntake(
     jobsScored: 0,
     errors: [],
     capped,
+    scoresCapped: false,
+    scoreBudgetRemaining: 0,
   };
+
+  // Weekly scoring budget (one DeepSeek call per job per persona). Counted per
+  // owner BEFORE the concurrent poll so workers can't over-spend the budget.
+  const budgetLimit = weeklyScoreLimit();
+  const budgetByUser = new Map<string, number>();
+  if (budgetLimit > 0) {
+    const userIds = Array.from(new Set(companies.map((c) => c.user_id)));
+    for (const userId of userIds) {
+      budgetByUser.set(userId, await remainingScoreBudget(client, userId));
+    }
+  }
 
   const profilesCache = new Map<string, ProfileRow[]>();
 
@@ -357,7 +370,8 @@ export async function runAtsIntake(
       }
     }
 
-    // Score brand-new jobs against every persona that owns this company.
+    // Score brand-new jobs against every persona that owns this company,
+    // staying within the per-user weekly DeepSeek budget.
     if (newIds.length > 0) {
       let profiles = profilesCache.get(company.user_id);
       if (!profiles) {
@@ -366,11 +380,29 @@ export async function runAtsIntake(
       }
       if (profiles.length > 0) {
         for (const jobId of newIds) {
+          const remaining = budgetByUser.get(company.user_id) ?? 0;
+          if (remaining <= 0) {
+            summary.scoresCapped = true;
+            break;
+          }
+          // Reserve up front so concurrent companies can't double-spend.
+          const personasToScore =
+            remaining >= profiles.length ? profiles : profiles.slice(0, remaining);
+          budgetByUser.set(company.user_id, remaining - personasToScore.length);
           try {
-            const result = await scoreJobForAllPersonas(client, jobId, profiles);
+            const result = await scoreJobForAllPersonas(
+              client,
+              jobId,
+              personasToScore,
+            );
             if (result.scores.length > 0) summary.jobsScored += 1;
           } catch {
-            // Individual scoring failures shouldn't fail the whole run.
+            // Individual scoring failures shouldn't fail the whole run; refund
+            // the reserved budget since no score was produced.
+            budgetByUser.set(
+              company.user_id,
+              (budgetByUser.get(company.user_id) ?? 0) + personasToScore.length,
+            );
           }
         }
       }
@@ -389,6 +421,11 @@ export async function runAtsIntake(
       })
       .eq("id", company.id);
   });
+
+  summary.scoreBudgetRemaining = Array.from(budgetByUser.values()).reduce(
+    (sum, value) => sum + value,
+    0,
+  );
 
   return summary;
 }

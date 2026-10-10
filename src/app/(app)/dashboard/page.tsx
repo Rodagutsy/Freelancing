@@ -15,10 +15,11 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const supabase = await createClient();
 
-  const [stats, applyNow, review, profile] = await Promise.all([
+  const [stats, applyNow, review, latest, profile] = await Promise.all([
     getDashboardStats(supabase),
     listJobs(supabase, { status: "apply", limit: 5 }),
     listJobs(supabase, { status: "review", limit: 5 }),
+    listJobs(supabase, { status: "all", postedHours: 0, sort: "ingested", limit: 5 }),
     getDefaultProfile(supabase),
   ]);
 
@@ -44,21 +45,21 @@ export default async function DashboardPage() {
       />
 
       <section className={styles.strip} aria-label="Today's decisions">
-        <Link href="/jobs?status=apply&score=0&posted=0" className={styles.stripItem}>
+        <Link href="/jobs?status=apply&posted=0" className={styles.stripItem}>
           <CircleCheck className={`${styles.stripIcon} ${styles.success}`} aria-hidden />
           <div>
             <p className={styles.stripValue}>{stats.applyToday}</p>
             <p className={styles.stripLabel}>Apply now</p>
           </div>
         </Link>
-        <Link href="/jobs?status=review&score=0&posted=0" className={styles.stripItem}>
+        <Link href="/jobs?status=review&posted=0" className={styles.stripItem}>
           <CircleAlert className={`${styles.stripIcon} ${styles.warning}`} aria-hidden />
           <div>
             <p className={styles.stripValue}>{stats.reviewToday}</p>
             <p className={styles.stripLabel}>Review</p>
           </div>
         </Link>
-        <Link href="/jobs?status=skip&score=0&posted=0" className={styles.stripItem}>
+        <Link href="/jobs?status=skip&posted=0" className={styles.stripItem}>
           <CircleX className={`${styles.stripIcon} ${styles.danger}`} aria-hidden />
           <div>
             <p className={styles.stripValue}>{stats.skipToday}</p>
@@ -93,6 +94,33 @@ export default async function DashboardPage() {
             <p className={styles.metricLabel}>Applications logged</p>
           </Link>
         </div>
+      </section>
+
+      <section className={styles.section} aria-label="Latest jobs">
+        <div className={styles.sectionHeader}>
+          <h2 className={styles.sectionTitle}>Latest jobs</h2>
+          <Link href="/jobs" className={styles.sectionLink}>
+            View all
+            <ArrowRight className={styles.sectionLinkIcon} aria-hidden />
+          </Link>
+        </div>
+        {latest.items.length > 0 ? (
+          <div className={styles.jobList}>
+            {latest.items.map((job) => (
+              <JobCard key={job.id} job={job} />
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            title="No jobs imported yet"
+            description="Jobs from your saved searches and watched boards will appear here as they arrive."
+            action={
+              <Link href="/settings">
+                <Button variant="secondary">Manage watched boards</Button>
+              </Link>
+            }
+          />
+        )}
       </section>
 
       <section className={styles.section} aria-label="Apply now jobs">

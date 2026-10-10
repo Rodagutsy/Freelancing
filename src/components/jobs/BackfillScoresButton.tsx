@@ -19,13 +19,20 @@ export function BackfillScoresButton() {
     const result = await backfillScoresAction();
     setRunning(false);
     if (result.ok && result.data) {
-      const { scored, skipped } = result.data;
-      toast(
-        scored === 0
-          ? "Every job already has a score for all personas."
-          : `Scored ${scored} job${scored === 1 ? "" : "s"} across your personas${skipped ? ` (${skipped} left — run again)` : ""}.`,
-        "success",
-      );
+      const { scored, skipped, capped } = result.data;
+      if (capped && scored === 0) {
+        toast(
+          "Weekly AI scoring limit reached. Scoring resumes automatically as the 7-day window frees up.",
+          "info",
+        );
+      } else {
+        toast(
+          scored === 0
+            ? "Every job already has a score for all personas."
+            : `Scored ${scored} job${scored === 1 ? "" : "s"} across your personas${skipped ? ` (${skipped} left${capped ? ", weekly limit reached" : " — run again"})` : ""}.`,
+          capped ? "info" : "success",
+        );
+      }
       router.refresh();
     } else {
       toast(result.error ?? "Backfill failed.", "error");

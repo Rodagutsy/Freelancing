@@ -32,14 +32,16 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
   const status = (params.get("status") as "apply" | "review" | "skip" | "all") ?? "all";
   const scoreParam = params.get("score");
   const postedParam = params.get("posted");
-  // Explicit score wins; otherwise the default 7–10 band only applies to the
-  // unfiltered view so the status (Apply/Review/Skip) filter is not overridden.
-  const scoreMin = scoreParam !== null ? Number(scoreParam) : status === "all" ? 7 : undefined;
-  const scoreMax = scoreParam !== null ? 10 : status === "all" ? 10 : undefined;
+  // "Any score" (score=0 or no param) means no score filter at all, so unscored
+  // jobs are included. An explicit 7/8/9 wins and caps at 10. When no score is
+  // chosen, listJobs applies the status band (Apply/Review/Skip).
+  const scoreValue = scoreParam !== null ? Number(scoreParam) : 0;
+  const scoreMin = scoreValue > 0 ? scoreValue : undefined;
+  const scoreMax = scoreValue > 0 ? 10 : undefined;
   const result = await listJobs(supabase, {
     scoreMin,
     scoreMax,
-    postedHours: postedParam !== null ? Number(postedParam) : 24,
+    postedHours: postedParam !== null ? Number(postedParam) : 0,
     budgetMin: params.get("budget") ? Number(params.get("budget")) : undefined,
     clientRating: params.get("rating")
       ? Number(params.get("rating"))

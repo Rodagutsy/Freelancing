@@ -28,8 +28,9 @@ import {
 } from "@/lib/services/scoring";
 import { clearPersonaCv } from "@/lib/services/personaCv";
 import { generateTailoredCv } from "@/lib/services/tailoredCv";
-import { runAtsIntake } from "@/lib/services/atsIntake";
+import { runAtsIntake, type AtsIntakeSummary } from "@/lib/services/atsIntake";
 import { getIntakeRunOptions } from "@/lib/services/intakeOptions";
+import { remainingScoreBudget } from "@/lib/services/scoringBudget";
 import {
   createProfile,
   deleteProfile,
@@ -682,7 +683,7 @@ export async function rescoreJobAllPersonasAction(
 
 /** Scores any jobs that don't yet have a score for every persona. */
 export async function backfillScoresAction(): Promise<
-  ActionResult<{ scored: number; skipped: number; failures: string[] }>
+  ActionResult<{ scored: number; skipped: number; failures: string[]; capped: boolean }>
 > {
   const user = await requireUser();
   if (!user) return { ok: false, error: "You must be signed in." };
@@ -695,12 +696,27 @@ export async function backfillScoresAction(): Promise<
     const profiles = await getProfiles(supabase);
     const jobIds = await listJobsMissingScores(supabase, profiles.length, 25);
     if (jobIds.length === 0) {
-      return { ok: true, data: { scored: 0, skipped: 0, failures: [] } };
+      return { ok: true, data: { scored: 0, skipped: 0, failures: [], capped: false } };
     }
-    const result = await scoreJobsForAllPersonas(supabase, jobIds, 25);
+
+    // Respect the weekly DeepSeek budget (one call per job per persona).
+    const remaining = await remainingScoreBudget(supabase, user.id);
+    const maxJobs = Math.floor(remaining / Math.max(1, profiles.length));
+    if (maxJobs <= 0) {
+      return {
+        ok: true,
+        data: { scored: 0, skipped: jobIds.length, failures: [], capped: true },
+      };
+    }
+
+    const batch = jobIds.slice(0, Math.min(25, maxJobs));
+    const result = await scoreJobsForAllPersonas(supabase, batch, batch.length);
     revalidatePath("/jobs");
     revalidatePath("/dashboard");
-    return { ok: true, data: result };
+    return {
+      ok: true,
+      data: { ...result, capped: batch.length < jobIds.length },
+    };
   } catch (error) {
     return fail(error);
   }
@@ -1059,14 +1075,7 @@ export async function deleteWatchedCompanyAction(
 
 /** Manually polls the caller's active ATS boards right now. */
 export async function runAtsIntakeAction(): Promise<
-  ActionResult<{
-    companiesPolled: number;
-    jobsFound: number;
-    jobsNew: number;
-    jobsScored: number;
-    errors: Array<{ company: string; error: string }>;
-    capped: boolean;
-  }>
+  ActionResult<AtsIntakeSummary>
 > {
   const user = await requireUser();
   if (!user) return { ok: false, error: "You must be signed in." };
@@ -1093,14 +1102,7 @@ export async function runAtsIntakeAction(): Promise<
  * user can run it (single-user setup).
  */
 export async function runAdminIntakeAction(): Promise<
-  ActionResult<{
-    companiesPolled: number;
-    jobsFound: number;
-    jobsNew: number;
-    jobsScored: number;
-    errors: Array<{ company: string; error: string }>;
-    capped: boolean;
-  }>
+  ActionResult<AtsIntakeSummary>
 > {
   const user = await requireUser();
   if (!user) return { ok: false, error: "You must be signed in." };
