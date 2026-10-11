@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
-import { listJobs } from "@/lib/services/jobs";
+import {
+  DEFAULT_MIN_PERSONA_SCORE,
+  DEFAULT_POSTED_HOURS,
+  listJobs,
+} from "@/lib/services/jobs";
 import { getProfiles } from "@/lib/services/settings";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { FilterBar } from "@/components/jobs/FilterBar";
@@ -41,7 +45,7 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
   const result = await listJobs(supabase, {
     scoreMin,
     scoreMax,
-    postedHours: postedParam !== null ? Number(postedParam) : 0,
+    postedHours: postedParam !== null ? Number(postedParam) : DEFAULT_POSTED_HOURS,
     budgetMin: params.get("budget") ? Number(params.get("budget")) : undefined,
     clientRating: params.get("rating")
       ? Number(params.get("rating"))
@@ -55,6 +59,8 @@ export default async function JobsPage({ searchParams }: JobsPageProps) {
       : undefined,
     status,
     profileId: params.get("profileId") ?? undefined,
+    minPersonaScore: DEFAULT_MIN_PERSONA_SCORE,
+    personaCount: profiles.length,
     page,
     limit: 12,
     sort: "score_desc",

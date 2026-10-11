@@ -1,362 +1,348 @@
-﻿{
-    "name":  "02 - Scoring (jobs -\u003e job_scores)",
-    "nodes":  [
-                  {
-                      "parameters":  {
-
-                                     },
-                      "id":  "2a1b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
-                      "name":  "When Called From Intake",
-                      "type":  "n8n-nodes-base.executeWorkflowTrigger",
-                      "typeVersion":  1.1,
-                      "position":  [
-                                       0,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "mode":  "runOnceForAllItems",
-                                         "jsCode":  "// Normalize the job row handed over by the intake workflow.\nconst input = $input.first().json;\nconst job = Array.isArray(input) ? input[0] : input;\nconst job_id = job.id || job.job_id;\nif (!job_id) throw new Error(\u0027No job_id received from intake workflow\u0027);\nreturn { job_id, job };"
-                                     },
-                      "id":  "3b2c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
-                      "name":  "Normalize Job Input",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       280,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "method":  "GET",
-                                         "url":  "={{$env.SUPABASE_URL}}/rest/v1/profiles?select=*\u0026is_default=eq.true\u0026user_id=eq.{{$env.OWNER_USER_ID}}\u0026limit=1",
-                                         "sendHeaders":  true,
-                                         "headerParameters":  {
-                                                                  "parameters":  [
-                                                                                     {
-                                                                                         "name":  "apikey",
-                                                                                         "value":  "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
-                                                                                     },
-                                                                                     {
-                                                                                         "name":  "Authorization",
-                                                                                         "value":  "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
-                                                                                     }
-                                                                                 ]
-                                                              },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "4c3d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
-                      "name":  "Load Profile",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.2,
-                      "position":  [
-                                       560,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "method":  "GET",
-                                         "url":  "={{$env.SUPABASE_URL}}/rest/v1/portfolio_projects?select=*\u0026user_id=eq.{{$env.OWNER_USER_ID}}",
-                                         "sendHeaders":  true,
-                                         "headerParameters":  {
-                                                                  "parameters":  [
-                                                                                     {
-                                                                                         "name":  "apikey",
-                                                                                         "value":  "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
-                                                                                     },
-                                                                                     {
-                                                                                         "name":  "Authorization",
-                                                                                         "value":  "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
-                                                                                     }
-                                                                                 ]
-                                                              },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "5d4e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
-                      "name":  "Load Portfolio",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.2,
-                      "position":  [
-                                       840,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "mode":  "runOnceForAllItems",
-                                         "jsCode":  "const { job_id, job } = $(\u0027Normalize Job Input\u0027).first().json;\nconst profileRows = $(\u0027Load Profile\u0027).first().json;\nconst portfolioRows = $(\u0027Load Portfolio\u0027).first().json;\nconst profile = Array.isArray(profileRows) ? profileRows[0] : profileRows;\nconst portfolio = Array.isArray(portfolioRows) ? portfolioRows : (portfolioRows ? [portfolioRows] : []);\nif (!profile || !profile.id) throw new Error(\u0027Profile not found - run 03_seed.sql first\u0027);\n\nfunction fmtBudget() {\n  if (job.budget_type === \u0027hourly\u0027) {\n    return (job.budget_min != null || job.budget_max != null)\n      ? \u0027\n\nfunction fmtProjects(list) {\n  return list.map(function (p) {\n    return \u0027- project id: \u0027 + p.id +\n      \u0027\\ntitle: \u0027 + p.title +\n      \u0027\\ndescription: \u0027 + (p.description || \u0027-\u0027) +\n      \u0027\\nskills: \u0027 + ((p.skills || []).join(\u0027, \u0027) || \u0027-\u0027) +\n      \u0027\\nstrength: \u0027 + p.strength +\n      \u0027\\nimplementation_status: \u0027 + p.implementation_status +\n      \u0027\\ncan_claim_text: \u0027 + p.can_claim_text +\n      \u0027\\ncannot_claim_text: \u0027 + (p.cannot_claim_text || \u0027none\u0027);\n  }).join(\u0027\\n\\n\u0027);\n}\n\nconst SYSTEM = \u0027You are a senior Upwork consultant. You evaluate a job posting against a single freelancer profile and their verified portfolio. Your goal is an honest fit score, never an inflated one.\\n\\nScoring rubric - factors and weights:\\n- portfolio_match (25%): how directly the freelancer\\\u0027s portfolio matches the work requested\\n- skill_match (20%): overlap between requested skills and the freelancer\\\u0027s stated skills\\n- experience (15%): relevant experience suggested by the profile and portfolio\\n- client_quality (10%): rating, reviews, hire rate, jobs posted (unknown data must not be assumed good)\\n- budget_fit (10%): posted budget or salary vs the freelancer\\\u0027s target rate range. For salaried roles, compare annual salary to equivalent hourly rate.\\n- requirements_fit (10%): how realistic the job requirements are\\n- competition (5%): proposal count - high competition lowers the score\\n- red_flags (5%): anything suspicious or a strong mismatch lowers the score\\n\\nRules:\\n- Score each factor 0-10. score_total is the weighted sum, 0-10, one decimal place.\\n- confidence is 0-1 and reflects data completeness (missing budget, rating, or hire history lowers it).\\n- recommendation must be exactly one of APPLY, REVIEW, SKIP.\\n- Map score_total to bands: 8.0-10.0 -\u003e APPLY; 7.0-7.9 -\u003e REVIEW; 6.0-6.9 -\u003e REVIEW (usually skip); 0-5.9 -\u003e SKIP.\\n- explanation: 2-4 sentences, human-readable, listing the strongest reasons for the score, the biggest gaps, and any red flags. State clearly what is unknown.\\n- Never invent facts that are not present in the input.\\n\\nReturn STRICT JSON only, with exactly this shape:\\n{\\\u0027score_total\\\u0027: number, \\\u0027confidence\\\u0027: number, \\\u0027recommendation\\\u0027: \\\u0027APPLY\\\u0027|\\\u0027REVIEW\\\u0027|\\\u0027SKIP\\\u0027, \\\u0027explanation\\\u0027: string, \\\u0027factors\\\u0027: {\\\u0027portfolio_match\\\u0027: number, \\\u0027skill_match\\\u0027: number, \\\u0027experience\\\u0027: number, \\\u0027client_quality\\\u0027: number, \\\u0027budget_fit\\\u0027: number, \\\u0027requirements_fit\\\u0027: number, \\\u0027competition\\\u0027: number, \\\u0027red_flags\\\u0027: number}}\u0027;\n\nconst user = \u0027JOB:\\n- title: \u0027 + job.title +\n  \u0027\\n- description: \u0027 + job.description +\n  \u0027\\n- skills_requested: \u0027 + ((job.skills_requested || []).join(\u0027, \u0027) || \u0027none listed\u0027) +\n  \u0027\\n- budget_type: \u0027 + (job.budget_type || \u0027not given\u0027) +\n  \u0027\\n- budget: \u0027 + fmtBudget() +\n  \u0027\\n- client_rating: \u0027 + (job.client_rating ?? \u0027not given\u0027) +\n  \u0027\\n- client_reviews_count: \u0027 + (job.client_reviews_count ?? \u0027not given\u0027) +\n  \u0027\\n- client_jobs_posted: \u0027 + (job.client_jobs_posted ?? \u0027not given\u0027) +\n  \u0027\\n- client_hire_rate: \u0027 + (job.client_hire_rate ?? \u0027not given\u0027) +\n  \u0027\\n- proposals_count: \u0027 + (job.proposals_count ?? \u0027not given\u0027) +\n  \u0027\\n- posted_at: \u0027 + job.posted_at +\n  \u0027\\n- url: \u0027 + job.url +\n  \u0027\\n\\nPROFILE:\\n- name: \u0027 + profile.name +\n  \u0027\\n- headline: \u0027 + profile.headline +\n  \u0027\\n- services: \u0027 + ((profile.services || []).join(\u0027, \u0027)) +\n  \u0027\\n- niches: \u0027 + ((profile.niches || []).join(\u0027, \u0027)) +\n  \u0027\\n- target_rate_min: \u0027 + (profile.target_rate_min ?? \u0027not set\u0027) +\n  \u0027\\n- target_rate_max: \u0027 + (profile.target_rate_max ?? \u0027not set\u0027) +\n  \u0027\\n\\nVERIFIED PORTFOLIO:\\n\u0027 + (fmtProjects(portfolio) || \u0027no portfolio projects added yet\u0027) +\n  \u0027\\n\\nScore this job honestly. Return STRICT JSON.\u0027;\n\nreturn { job_id, profile_id: profile.id, messages: [\n  { role: \u0027system\u0027, content: SYSTEM },\n  { role: \u0027user\u0027, content: user }\n] }; + (job.budget_min ?? \u0027?\u0027) + \u0027-\u0027 + \u0027\n\nfunction fmtProjects(list) {\n  return list.map(function (p) {\n    return \u0027- project id: \u0027 + p.id +\n      \u0027\\ntitle: \u0027 + p.title +\n      \u0027\\ndescription: \u0027 + (p.description || \u0027-\u0027) +\n      \u0027\\nskills: \u0027 + ((p.skills || []).join(\u0027, \u0027) || \u0027-\u0027) +\n      \u0027\\nstrength: \u0027 + p.strength +\n      \u0027\\nimplementation_status: \u0027 + p.implementation_status +\n      \u0027\\ncan_claim_text: \u0027 + p.can_claim_text +\n      \u0027\\ncannot_claim_text: \u0027 + (p.cannot_claim_text || \u0027none\u0027);\n  }).join(\u0027\\n\\n\u0027);\n}\n\nconst SYSTEM = \u0027You are a senior Upwork consultant. You evaluate a job posting against a single freelancer profile and their verified portfolio. Your goal is an honest fit score, never an inflated one.\\n\\nScoring rubric - factors and weights:\\n- portfolio_match (25%): how directly the freelancer\\\u0027s portfolio matches the work requested\\n- skill_match (20%): overlap between requested skills and the freelancer\\\u0027s stated skills\\n- experience (15%): relevant experience suggested by the profile and portfolio\\n- client_quality (10%): rating, reviews, hire rate, jobs posted (unknown data must not be assumed good)\\n- budget_fit (10%): posted budget vs the freelancer\\\u0027s target rate range\\n- requirements_fit (10%): how realistic the job requirements are\\n- competition (5%): proposal count - high competition lowers the score\\n- red_flags (5%): anything suspicious or a strong mismatch lowers the score\\n\\nRules:\\n- Score each factor 0-10. score_total is the weighted sum, 0-10, one decimal place.\\n- confidence is 0-1 and reflects data completeness (missing budget, rating, or hire history lowers it).\\n- recommendation must be exactly one of APPLY, REVIEW, SKIP.\\n- Map score_total to bands: 8.0-10.0 -\u003e APPLY; 7.0-7.9 -\u003e REVIEW; 6.0-6.9 -\u003e REVIEW (usually skip); 0-5.9 -\u003e SKIP.\\n- explanation: 2-4 sentences, human-readable, listing the strongest reasons for the score, the biggest gaps, and any red flags. State clearly what is unknown.\\n- Never invent facts that are not present in the input.\\n\\nReturn STRICT JSON only, with exactly this shape:\\n{\\\u0027score_total\\\u0027: number, \\\u0027confidence\\\u0027: number, \\\u0027recommendation\\\u0027: \\\u0027APPLY\\\u0027|\\\u0027REVIEW\\\u0027|\\\u0027SKIP\\\u0027, \\\u0027explanation\\\u0027: string, \\\u0027factors\\\u0027: {\\\u0027portfolio_match\\\u0027: number, \\\u0027skill_match\\\u0027: number, \\\u0027experience\\\u0027: number, \\\u0027client_quality\\\u0027: number, \\\u0027budget_fit\\\u0027: number, \\\u0027requirements_fit\\\u0027: number, \\\u0027competition\\\u0027: number, \\\u0027red_flags\\\u0027: number}}\u0027;\n\nconst user = \u0027JOB:\\n- title: \u0027 + job.title +\n  \u0027\\n- description: \u0027 + job.description +\n  \u0027\\n- skills_requested: \u0027 + ((job.skills_requested || []).join(\u0027, \u0027) || \u0027none listed\u0027) +\n  \u0027\\n- budget_type: \u0027 + (job.budget_type || \u0027not given\u0027) +\n  \u0027\\n- budget: \u0027 + fmtBudget() +\n  \u0027\\n- client_rating: \u0027 + (job.client_rating ?? \u0027not given\u0027) +\n  \u0027\\n- client_reviews_count: \u0027 + (job.client_reviews_count ?? \u0027not given\u0027) +\n  \u0027\\n- client_jobs_posted: \u0027 + (job.client_jobs_posted ?? \u0027not given\u0027) +\n  \u0027\\n- client_hire_rate: \u0027 + (job.client_hire_rate ?? \u0027not given\u0027) +\n  \u0027\\n- proposals_count: \u0027 + (job.proposals_count ?? \u0027not given\u0027) +\n  \u0027\\n- posted_at: \u0027 + job.posted_at +\n  \u0027\\n- url: \u0027 + job.url +\n  \u0027\\n\\nPROFILE:\\n- name: \u0027 + profile.name +\n  \u0027\\n- headline: \u0027 + profile.headline +\n  \u0027\\n- services: \u0027 + ((profile.services || []).join(\u0027, \u0027)) +\n  \u0027\\n- niches: \u0027 + ((profile.niches || []).join(\u0027, \u0027)) +\n  \u0027\\n- target_rate_min: \u0027 + (profile.target_rate_min ?? \u0027not set\u0027) +\n  \u0027\\n- target_rate_max: \u0027 + (profile.target_rate_max ?? \u0027not set\u0027) +\n  \u0027\\n\\nVERIFIED PORTFOLIO:\\n\u0027 + (fmtProjects(portfolio) || \u0027no portfolio projects added yet\u0027) +\n  \u0027\\n\\nScore this job honestly. Return STRICT JSON.\u0027;\n\nreturn { job_id, profile_id: profile.id, messages: [\n  { role: \u0027system\u0027, content: SYSTEM },\n  { role: \u0027user\u0027, content: user }\n] }; + (job.budget_max ?? \u0027?\u0027) + \u0027/hr\u0027\n      : \u0027not given\u0027;\n  }\n  if (job.budget_type === \u0027salary\u0027) {\n    return (job.budget_min != null || job.budget_max != null)\n      ? \u0027\n\nfunction fmtProjects(list) {\n  return list.map(function (p) {\n    return \u0027- project id: \u0027 + p.id +\n      \u0027\\ntitle: \u0027 + p.title +\n      \u0027\\ndescription: \u0027 + (p.description || \u0027-\u0027) +\n      \u0027\\nskills: \u0027 + ((p.skills || []).join(\u0027, \u0027) || \u0027-\u0027) +\n      \u0027\\nstrength: \u0027 + p.strength +\n      \u0027\\nimplementation_status: \u0027 + p.implementation_status +\n      \u0027\\ncan_claim_text: \u0027 + p.can_claim_text +\n      \u0027\\ncannot_claim_text: \u0027 + (p.cannot_claim_text || \u0027none\u0027);\n  }).join(\u0027\\n\\n\u0027);\n}\n\nconst SYSTEM = \u0027You are a senior Upwork consultant. You evaluate a job posting against a single freelancer profile and their verified portfolio. Your goal is an honest fit score, never an inflated one.\\n\\nScoring rubric - factors and weights:\\n- portfolio_match (25%): how directly the freelancer\\\u0027s portfolio matches the work requested\\n- skill_match (20%): overlap between requested skills and the freelancer\\\u0027s stated skills\\n- experience (15%): relevant experience suggested by the profile and portfolio\\n- client_quality (10%): rating, reviews, hire rate, jobs posted (unknown data must not be assumed good)\\n- budget_fit (10%): posted budget vs the freelancer\\\u0027s target rate range\\n- requirements_fit (10%): how realistic the job requirements are\\n- competition (5%): proposal count - high competition lowers the score\\n- red_flags (5%): anything suspicious or a strong mismatch lowers the score\\n\\nRules:\\n- Score each factor 0-10. score_total is the weighted sum, 0-10, one decimal place.\\n- confidence is 0-1 and reflects data completeness (missing budget, rating, or hire history lowers it).\\n- recommendation must be exactly one of APPLY, REVIEW, SKIP.\\n- Map score_total to bands: 8.0-10.0 -\u003e APPLY; 7.0-7.9 -\u003e REVIEW; 6.0-6.9 -\u003e REVIEW (usually skip); 0-5.9 -\u003e SKIP.\\n- explanation: 2-4 sentences, human-readable, listing the strongest reasons for the score, the biggest gaps, and any red flags. State clearly what is unknown.\\n- Never invent facts that are not present in the input.\\n\\nReturn STRICT JSON only, with exactly this shape:\\n{\\\u0027score_total\\\u0027: number, \\\u0027confidence\\\u0027: number, \\\u0027recommendation\\\u0027: \\\u0027APPLY\\\u0027|\\\u0027REVIEW\\\u0027|\\\u0027SKIP\\\u0027, \\\u0027explanation\\\u0027: string, \\\u0027factors\\\u0027: {\\\u0027portfolio_match\\\u0027: number, \\\u0027skill_match\\\u0027: number, \\\u0027experience\\\u0027: number, \\\u0027client_quality\\\u0027: number, \\\u0027budget_fit\\\u0027: number, \\\u0027requirements_fit\\\u0027: number, \\\u0027competition\\\u0027: number, \\\u0027red_flags\\\u0027: number}}\u0027;\n\nconst user = \u0027JOB:\\n- title: \u0027 + job.title +\n  \u0027\\n- description: \u0027 + job.description +\n  \u0027\\n- skills_requested: \u0027 + ((job.skills_requested || []).join(\u0027, \u0027) || \u0027none listed\u0027) +\n  \u0027\\n- budget_type: \u0027 + (job.budget_type || \u0027not given\u0027) +\n  \u0027\\n- budget: \u0027 + fmtBudget() +\n  \u0027\\n- client_rating: \u0027 + (job.client_rating ?? \u0027not given\u0027) +\n  \u0027\\n- client_reviews_count: \u0027 + (job.client_reviews_count ?? \u0027not given\u0027) +\n  \u0027\\n- client_jobs_posted: \u0027 + (job.client_jobs_posted ?? \u0027not given\u0027) +\n  \u0027\\n- client_hire_rate: \u0027 + (job.client_hire_rate ?? \u0027not given\u0027) +\n  \u0027\\n- proposals_count: \u0027 + (job.proposals_count ?? \u0027not given\u0027) +\n  \u0027\\n- posted_at: \u0027 + job.posted_at +\n  \u0027\\n- url: \u0027 + job.url +\n  \u0027\\n\\nPROFILE:\\n- name: \u0027 + profile.name +\n  \u0027\\n- headline: \u0027 + profile.headline +\n  \u0027\\n- services: \u0027 + ((profile.services || []).join(\u0027, \u0027)) +\n  \u0027\\n- niches: \u0027 + ((profile.niches || []).join(\u0027, \u0027)) +\n  \u0027\\n- target_rate_min: \u0027 + (profile.target_rate_min ?? \u0027not set\u0027) +\n  \u0027\\n- target_rate_max: \u0027 + (profile.target_rate_max ?? \u0027not set\u0027) +\n  \u0027\\n\\nVERIFIED PORTFOLIO:\\n\u0027 + (fmtProjects(portfolio) || \u0027no portfolio projects added yet\u0027) +\n  \u0027\\n\\nScore this job honestly. Return STRICT JSON.\u0027;\n\nreturn { job_id, profile_id: profile.id, messages: [\n  { role: \u0027system\u0027, content: SYSTEM },\n  { role: \u0027user\u0027, content: user }\n] }; + (job.budget_min ?? \u0027?\u0027) + \u0027-\u0027 + \u0027\n\nfunction fmtProjects(list) {\n  return list.map(function (p) {\n    return \u0027- project id: \u0027 + p.id +\n      \u0027\\ntitle: \u0027 + p.title +\n      \u0027\\ndescription: \u0027 + (p.description || \u0027-\u0027) +\n      \u0027\\nskills: \u0027 + ((p.skills || []).join(\u0027, \u0027) || \u0027-\u0027) +\n      \u0027\\nstrength: \u0027 + p.strength +\n      \u0027\\nimplementation_status: \u0027 + p.implementation_status +\n      \u0027\\ncan_claim_text: \u0027 + p.can_claim_text +\n      \u0027\\ncannot_claim_text: \u0027 + (p.cannot_claim_text || \u0027none\u0027);\n  }).join(\u0027\\n\\n\u0027);\n}\n\nconst SYSTEM = \u0027You are a senior Upwork consultant. You evaluate a job posting against a single freelancer profile and their verified portfolio. Your goal is an honest fit score, never an inflated one.\\n\\nScoring rubric - factors and weights:\\n- portfolio_match (25%): how directly the freelancer\\\u0027s portfolio matches the work requested\\n- skill_match (20%): overlap between requested skills and the freelancer\\\u0027s stated skills\\n- experience (15%): relevant experience suggested by the profile and portfolio\\n- client_quality (10%): rating, reviews, hire rate, jobs posted (unknown data must not be assumed good)\\n- budget_fit (10%): posted budget vs the freelancer\\\u0027s target rate range\\n- requirements_fit (10%): how realistic the job requirements are\\n- competition (5%): proposal count - high competition lowers the score\\n- red_flags (5%): anything suspicious or a strong mismatch lowers the score\\n\\nRules:\\n- Score each factor 0-10. score_total is the weighted sum, 0-10, one decimal place.\\n- confidence is 0-1 and reflects data completeness (missing budget, rating, or hire history lowers it).\\n- recommendation must be exactly one of APPLY, REVIEW, SKIP.\\n- Map score_total to bands: 8.0-10.0 -\u003e APPLY; 7.0-7.9 -\u003e REVIEW; 6.0-6.9 -\u003e REVIEW (usually skip); 0-5.9 -\u003e SKIP.\\n- explanation: 2-4 sentences, human-readable, listing the strongest reasons for the score, the biggest gaps, and any red flags. State clearly what is unknown.\\n- Never invent facts that are not present in the input.\\n\\nReturn STRICT JSON only, with exactly this shape:\\n{\\\u0027score_total\\\u0027: number, \\\u0027confidence\\\u0027: number, \\\u0027recommendation\\\u0027: \\\u0027APPLY\\\u0027|\\\u0027REVIEW\\\u0027|\\\u0027SKIP\\\u0027, \\\u0027explanation\\\u0027: string, \\\u0027factors\\\u0027: {\\\u0027portfolio_match\\\u0027: number, \\\u0027skill_match\\\u0027: number, \\\u0027experience\\\u0027: number, \\\u0027client_quality\\\u0027: number, \\\u0027budget_fit\\\u0027: number, \\\u0027requirements_fit\\\u0027: number, \\\u0027competition\\\u0027: number, \\\u0027red_flags\\\u0027: number}}\u0027;\n\nconst user = \u0027JOB:\\n- title: \u0027 + job.title +\n  \u0027\\n- description: \u0027 + job.description +\n  \u0027\\n- skills_requested: \u0027 + ((job.skills_requested || []).join(\u0027, \u0027) || \u0027none listed\u0027) +\n  \u0027\\n- budget_type: \u0027 + (job.budget_type || \u0027not given\u0027) +\n  \u0027\\n- budget: \u0027 + fmtBudget() +\n  \u0027\\n- client_rating: \u0027 + (job.client_rating ?? \u0027not given\u0027) +\n  \u0027\\n- client_reviews_count: \u0027 + (job.client_reviews_count ?? \u0027not given\u0027) +\n  \u0027\\n- client_jobs_posted: \u0027 + (job.client_jobs_posted ?? \u0027not given\u0027) +\n  \u0027\\n- client_hire_rate: \u0027 + (job.client_hire_rate ?? \u0027not given\u0027) +\n  \u0027\\n- proposals_count: \u0027 + (job.proposals_count ?? \u0027not given\u0027) +\n  \u0027\\n- posted_at: \u0027 + job.posted_at +\n  \u0027\\n- url: \u0027 + job.url +\n  \u0027\\n\\nPROFILE:\\n- name: \u0027 + profile.name +\n  \u0027\\n- headline: \u0027 + profile.headline +\n  \u0027\\n- services: \u0027 + ((profile.services || []).join(\u0027, \u0027)) +\n  \u0027\\n- niches: \u0027 + ((profile.niches || []).join(\u0027, \u0027)) +\n  \u0027\\n- target_rate_min: \u0027 + (profile.target_rate_min ?? \u0027not set\u0027) +\n  \u0027\\n- target_rate_max: \u0027 + (profile.target_rate_max ?? \u0027not set\u0027) +\n  \u0027\\n\\nVERIFIED PORTFOLIO:\\n\u0027 + (fmtProjects(portfolio) || \u0027no portfolio projects added yet\u0027) +\n  \u0027\\n\\nScore this job honestly. Return STRICT JSON.\u0027;\n\nreturn { job_id, profile_id: profile.id, messages: [\n  { role: \u0027system\u0027, content: SYSTEM },\n  { role: \u0027user\u0027, content: user }\n] }; + (job.budget_max ?? \u0027?\u0027) + \u0027/yr (salary)\u0027\n      : \u0027not given\u0027;\n  }\n  if (job.budget_min != null || job.budget_max != null) return \u0027\n\nfunction fmtProjects(list) {\n  return list.map(function (p) {\n    return \u0027- project id: \u0027 + p.id +\n      \u0027\\ntitle: \u0027 + p.title +\n      \u0027\\ndescription: \u0027 + (p.description || \u0027-\u0027) +\n      \u0027\\nskills: \u0027 + ((p.skills || []).join(\u0027, \u0027) || \u0027-\u0027) +\n      \u0027\\nstrength: \u0027 + p.strength +\n      \u0027\\nimplementation_status: \u0027 + p.implementation_status +\n      \u0027\\ncan_claim_text: \u0027 + p.can_claim_text +\n      \u0027\\ncannot_claim_text: \u0027 + (p.cannot_claim_text || \u0027none\u0027);\n  }).join(\u0027\\n\\n\u0027);\n}\n\nconst SYSTEM = \u0027You are a senior Upwork consultant. You evaluate a job posting against a single freelancer profile and their verified portfolio. Your goal is an honest fit score, never an inflated one.\\n\\nScoring rubric - factors and weights:\\n- portfolio_match (25%): how directly the freelancer\\\u0027s portfolio matches the work requested\\n- skill_match (20%): overlap between requested skills and the freelancer\\\u0027s stated skills\\n- experience (15%): relevant experience suggested by the profile and portfolio\\n- client_quality (10%): rating, reviews, hire rate, jobs posted (unknown data must not be assumed good)\\n- budget_fit (10%): posted budget vs the freelancer\\\u0027s target rate range\\n- requirements_fit (10%): how realistic the job requirements are\\n- competition (5%): proposal count - high competition lowers the score\\n- red_flags (5%): anything suspicious or a strong mismatch lowers the score\\n\\nRules:\\n- Score each factor 0-10. score_total is the weighted sum, 0-10, one decimal place.\\n- confidence is 0-1 and reflects data completeness (missing budget, rating, or hire history lowers it).\\n- recommendation must be exactly one of APPLY, REVIEW, SKIP.\\n- Map score_total to bands: 8.0-10.0 -\u003e APPLY; 7.0-7.9 -\u003e REVIEW; 6.0-6.9 -\u003e REVIEW (usually skip); 0-5.9 -\u003e SKIP.\\n- explanation: 2-4 sentences, human-readable, listing the strongest reasons for the score, the biggest gaps, and any red flags. State clearly what is unknown.\\n- Never invent facts that are not present in the input.\\n\\nReturn STRICT JSON only, with exactly this shape:\\n{\\\u0027score_total\\\u0027: number, \\\u0027confidence\\\u0027: number, \\\u0027recommendation\\\u0027: \\\u0027APPLY\\\u0027|\\\u0027REVIEW\\\u0027|\\\u0027SKIP\\\u0027, \\\u0027explanation\\\u0027: string, \\\u0027factors\\\u0027: {\\\u0027portfolio_match\\\u0027: number, \\\u0027skill_match\\\u0027: number, \\\u0027experience\\\u0027: number, \\\u0027client_quality\\\u0027: number, \\\u0027budget_fit\\\u0027: number, \\\u0027requirements_fit\\\u0027: number, \\\u0027competition\\\u0027: number, \\\u0027red_flags\\\u0027: number}}\u0027;\n\nconst user = \u0027JOB:\\n- title: \u0027 + job.title +\n  \u0027\\n- description: \u0027 + job.description +\n  \u0027\\n- skills_requested: \u0027 + ((job.skills_requested || []).join(\u0027, \u0027) || \u0027none listed\u0027) +\n  \u0027\\n- budget_type: \u0027 + (job.budget_type || \u0027not given\u0027) +\n  \u0027\\n- budget: \u0027 + fmtBudget() +\n  \u0027\\n- client_rating: \u0027 + (job.client_rating ?? \u0027not given\u0027) +\n  \u0027\\n- client_reviews_count: \u0027 + (job.client_reviews_count ?? \u0027not given\u0027) +\n  \u0027\\n- client_jobs_posted: \u0027 + (job.client_jobs_posted ?? \u0027not given\u0027) +\n  \u0027\\n- client_hire_rate: \u0027 + (job.client_hire_rate ?? \u0027not given\u0027) +\n  \u0027\\n- proposals_count: \u0027 + (job.proposals_count ?? \u0027not given\u0027) +\n  \u0027\\n- posted_at: \u0027 + job.posted_at +\n  \u0027\\n- url: \u0027 + job.url +\n  \u0027\\n\\nPROFILE:\\n- name: \u0027 + profile.name +\n  \u0027\\n- headline: \u0027 + profile.headline +\n  \u0027\\n- services: \u0027 + ((profile.services || []).join(\u0027, \u0027)) +\n  \u0027\\n- niches: \u0027 + ((profile.niches || []).join(\u0027, \u0027)) +\n  \u0027\\n- target_rate_min: \u0027 + (profile.target_rate_min ?? \u0027not set\u0027) +\n  \u0027\\n- target_rate_max: \u0027 + (profile.target_rate_max ?? \u0027not set\u0027) +\n  \u0027\\n\\nVERIFIED PORTFOLIO:\\n\u0027 + (fmtProjects(portfolio) || \u0027no portfolio projects added yet\u0027) +\n  \u0027\\n\\nScore this job honestly. Return STRICT JSON.\u0027;\n\nreturn { job_id, profile_id: profile.id, messages: [\n  { role: \u0027system\u0027, content: SYSTEM },\n  { role: \u0027user\u0027, content: user }\n] }; + (job.budget_min ?? \u0027?\u0027) + \u0027-\u0027 + \u0027\n\nfunction fmtProjects(list) {\n  return list.map(function (p) {\n    return \u0027- project id: \u0027 + p.id +\n      \u0027\\ntitle: \u0027 + p.title +\n      \u0027\\ndescription: \u0027 + (p.description || \u0027-\u0027) +\n      \u0027\\nskills: \u0027 + ((p.skills || []).join(\u0027, \u0027) || \u0027-\u0027) +\n      \u0027\\nstrength: \u0027 + p.strength +\n      \u0027\\nimplementation_status: \u0027 + p.implementation_status +\n      \u0027\\ncan_claim_text: \u0027 + p.can_claim_text +\n      \u0027\\ncannot_claim_text: \u0027 + (p.cannot_claim_text || \u0027none\u0027);\n  }).join(\u0027\\n\\n\u0027);\n}\n\nconst SYSTEM = \u0027You are a senior Upwork consultant. You evaluate a job posting against a single freelancer profile and their verified portfolio. Your goal is an honest fit score, never an inflated one.\\n\\nScoring rubric - factors and weights:\\n- portfolio_match (25%): how directly the freelancer\\\u0027s portfolio matches the work requested\\n- skill_match (20%): overlap between requested skills and the freelancer\\\u0027s stated skills\\n- experience (15%): relevant experience suggested by the profile and portfolio\\n- client_quality (10%): rating, reviews, hire rate, jobs posted (unknown data must not be assumed good)\\n- budget_fit (10%): posted budget vs the freelancer\\\u0027s target rate range\\n- requirements_fit (10%): how realistic the job requirements are\\n- competition (5%): proposal count - high competition lowers the score\\n- red_flags (5%): anything suspicious or a strong mismatch lowers the score\\n\\nRules:\\n- Score each factor 0-10. score_total is the weighted sum, 0-10, one decimal place.\\n- confidence is 0-1 and reflects data completeness (missing budget, rating, or hire history lowers it).\\n- recommendation must be exactly one of APPLY, REVIEW, SKIP.\\n- Map score_total to bands: 8.0-10.0 -\u003e APPLY; 7.0-7.9 -\u003e REVIEW; 6.0-6.9 -\u003e REVIEW (usually skip); 0-5.9 -\u003e SKIP.\\n- explanation: 2-4 sentences, human-readable, listing the strongest reasons for the score, the biggest gaps, and any red flags. State clearly what is unknown.\\n- Never invent facts that are not present in the input.\\n\\nReturn STRICT JSON only, with exactly this shape:\\n{\\\u0027score_total\\\u0027: number, \\\u0027confidence\\\u0027: number, \\\u0027recommendation\\\u0027: \\\u0027APPLY\\\u0027|\\\u0027REVIEW\\\u0027|\\\u0027SKIP\\\u0027, \\\u0027explanation\\\u0027: string, \\\u0027factors\\\u0027: {\\\u0027portfolio_match\\\u0027: number, \\\u0027skill_match\\\u0027: number, \\\u0027experience\\\u0027: number, \\\u0027client_quality\\\u0027: number, \\\u0027budget_fit\\\u0027: number, \\\u0027requirements_fit\\\u0027: number, \\\u0027competition\\\u0027: number, \\\u0027red_flags\\\u0027: number}}\u0027;\n\nconst user = \u0027JOB:\\n- title: \u0027 + job.title +\n  \u0027\\n- description: \u0027 + job.description +\n  \u0027\\n- skills_requested: \u0027 + ((job.skills_requested || []).join(\u0027, \u0027) || \u0027none listed\u0027) +\n  \u0027\\n- budget_type: \u0027 + (job.budget_type || \u0027not given\u0027) +\n  \u0027\\n- budget: \u0027 + fmtBudget() +\n  \u0027\\n- client_rating: \u0027 + (job.client_rating ?? \u0027not given\u0027) +\n  \u0027\\n- client_reviews_count: \u0027 + (job.client_reviews_count ?? \u0027not given\u0027) +\n  \u0027\\n- client_jobs_posted: \u0027 + (job.client_jobs_posted ?? \u0027not given\u0027) +\n  \u0027\\n- client_hire_rate: \u0027 + (job.client_hire_rate ?? \u0027not given\u0027) +\n  \u0027\\n- proposals_count: \u0027 + (job.proposals_count ?? \u0027not given\u0027) +\n  \u0027\\n- posted_at: \u0027 + job.posted_at +\n  \u0027\\n- url: \u0027 + job.url +\n  \u0027\\n\\nPROFILE:\\n- name: \u0027 + profile.name +\n  \u0027\\n- headline: \u0027 + profile.headline +\n  \u0027\\n- services: \u0027 + ((profile.services || []).join(\u0027, \u0027)) +\n  \u0027\\n- niches: \u0027 + ((profile.niches || []).join(\u0027, \u0027)) +\n  \u0027\\n- target_rate_min: \u0027 + (profile.target_rate_min ?? \u0027not set\u0027) +\n  \u0027\\n- target_rate_max: \u0027 + (profile.target_rate_max ?? \u0027not set\u0027) +\n  \u0027\\n\\nVERIFIED PORTFOLIO:\\n\u0027 + (fmtProjects(portfolio) || \u0027no portfolio projects added yet\u0027) +\n  \u0027\\n\\nScore this job honestly. Return STRICT JSON.\u0027;\n\nreturn { job_id, profile_id: profile.id, messages: [\n  { role: \u0027system\u0027, content: SYSTEM },\n  { role: \u0027user\u0027, content: user }\n] }; + (job.budget_max ?? \u0027?\u0027) + \u0027 (fixed)\u0027;\n  return \u0027not given\u0027;\n}\n\nfunction fmtProjects(list) {\n  return list.map(function (p) {\n    return \u0027- project id: \u0027 + p.id +\n      \u0027\\ntitle: \u0027 + p.title +\n      \u0027\\ndescription: \u0027 + (p.description || \u0027-\u0027) +\n      \u0027\\nskills: \u0027 + ((p.skills || []).join(\u0027, \u0027) || \u0027-\u0027) +\n      \u0027\\nstrength: \u0027 + p.strength +\n      \u0027\\nimplementation_status: \u0027 + p.implementation_status +\n      \u0027\\ncan_claim_text: \u0027 + p.can_claim_text +\n      \u0027\\ncannot_claim_text: \u0027 + (p.cannot_claim_text || \u0027none\u0027);\n  }).join(\u0027\\n\\n\u0027);\n}\n\nconst SYSTEM = \u0027You are a senior Upwork consultant. You evaluate a job posting against a single freelancer profile and their verified portfolio. Your goal is an honest fit score, never an inflated one.\\n\\nScoring rubric - factors and weights:\\n- portfolio_match (25%): how directly the freelancer\\\u0027s portfolio matches the work requested\\n- skill_match (20%): overlap between requested skills and the freelancer\\\u0027s stated skills\\n- experience (15%): relevant experience suggested by the profile and portfolio\\n- client_quality (10%): rating, reviews, hire rate, jobs posted (unknown data must not be assumed good)\\n- budget_fit (10%): posted budget vs the freelancer\\\u0027s target rate range\\n- requirements_fit (10%): how realistic the job requirements are\\n- competition (5%): proposal count - high competition lowers the score\\n- red_flags (5%): anything suspicious or a strong mismatch lowers the score\\n\\nRules:\\n- Score each factor 0-10. score_total is the weighted sum, 0-10, one decimal place.\\n- confidence is 0-1 and reflects data completeness (missing budget, rating, or hire history lowers it).\\n- recommendation must be exactly one of APPLY, REVIEW, SKIP.\\n- Map score_total to bands: 8.0-10.0 -\u003e APPLY; 7.0-7.9 -\u003e REVIEW; 6.0-6.9 -\u003e REVIEW (usually skip); 0-5.9 -\u003e SKIP.\\n- explanation: 2-4 sentences, human-readable, listing the strongest reasons for the score, the biggest gaps, and any red flags. State clearly what is unknown.\\n- Never invent facts that are not present in the input.\\n\\nReturn STRICT JSON only, with exactly this shape:\\n{\\\u0027score_total\\\u0027: number, \\\u0027confidence\\\u0027: number, \\\u0027recommendation\\\u0027: \\\u0027APPLY\\\u0027|\\\u0027REVIEW\\\u0027|\\\u0027SKIP\\\u0027, \\\u0027explanation\\\u0027: string, \\\u0027factors\\\u0027: {\\\u0027portfolio_match\\\u0027: number, \\\u0027skill_match\\\u0027: number, \\\u0027experience\\\u0027: number, \\\u0027client_quality\\\u0027: number, \\\u0027budget_fit\\\u0027: number, \\\u0027requirements_fit\\\u0027: number, \\\u0027competition\\\u0027: number, \\\u0027red_flags\\\u0027: number}}\u0027;\n\nconst user = \u0027JOB:\\n- title: \u0027 + job.title +\n  \u0027\\n- description: \u0027 + job.description +\n  \u0027\\n- skills_requested: \u0027 + ((job.skills_requested || []).join(\u0027, \u0027) || \u0027none listed\u0027) +\n  \u0027\\n- budget_type: \u0027 + (job.budget_type || \u0027not given\u0027) +\n  \u0027\\n- budget: \u0027 + fmtBudget() +\n  \u0027\\n- client_rating: \u0027 + (job.client_rating ?? \u0027not given\u0027) +\n  \u0027\\n- client_reviews_count: \u0027 + (job.client_reviews_count ?? \u0027not given\u0027) +\n  \u0027\\n- client_jobs_posted: \u0027 + (job.client_jobs_posted ?? \u0027not given\u0027) +\n  \u0027\\n- client_hire_rate: \u0027 + (job.client_hire_rate ?? \u0027not given\u0027) +\n  \u0027\\n- proposals_count: \u0027 + (job.proposals_count ?? \u0027not given\u0027) +\n  \u0027\\n- posted_at: \u0027 + job.posted_at +\n  \u0027\\n- url: \u0027 + job.url +\n  \u0027\\n\\nPROFILE:\\n- name: \u0027 + profile.name +\n  \u0027\\n- headline: \u0027 + profile.headline +\n  \u0027\\n- services: \u0027 + ((profile.services || []).join(\u0027, \u0027)) +\n  \u0027\\n- niches: \u0027 + ((profile.niches || []).join(\u0027, \u0027)) +\n  \u0027\\n- target_rate_min: \u0027 + (profile.target_rate_min ?? \u0027not set\u0027) +\n  \u0027\\n- target_rate_max: \u0027 + (profile.target_rate_max ?? \u0027not set\u0027) +\n  \u0027\\n\\nVERIFIED PORTFOLIO:\\n\u0027 + (fmtProjects(portfolio) || \u0027no portfolio projects added yet\u0027) +\n  \u0027\\n\\nScore this job honestly. Return STRICT JSON.\u0027;\n\nreturn { job_id, profile_id: profile.id, messages: [\n  { role: \u0027system\u0027, content: SYSTEM },\n  { role: \u0027user\u0027, content: user }\n] };"
-                                     },
-                      "id":  "6e5f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
-                      "name":  "Build Score Messages",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       1120,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "method":  "POST",
-                                         "url":  "https://api.deepseek.com/chat/completions",
-                                         "sendHeaders":  true,
-                                         "headerParameters":  {
-                                                                  "parameters":  [
-                                                                                     {
-                                                                                         "name":  "Content-Type",
-                                                                                         "value":  "application/json"
-                                                                                     },
-                                                                                     {
-                                                                                         "name":  "Authorization",
-                                                                                         "value":  "=Bearer {{$env.DEEPSEEK_API_KEY}}"
-                                                                                     }
-                                                                                 ]
-                                                              },
-                                         "sendBody":  true,
-                                         "specifyBody":  "json",
-                                         "jsonBody":  "={{JSON.stringify({ model: \u0027deepseek-chat\u0027, temperature: 0.3, response_format: { type: \u0027json_object\u0027 }, messages: $json.messages })}}",
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "7f6a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
-                      "name":  "DeepSeek Score",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.2,
-                      "position":  [
-                                       1400,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "mode":  "runOnceForAllItems",
-                                         "jsCode":  "const input = $input.first().json;\nconst content = input \u0026\u0026 input.choices \u0026\u0026 input.choices[0]\n  ? (input.choices[0].message \u0026\u0026 input.choices[0].message.content) || input.choices[0].text\n  : null;\nif (!content) throw new Error(\u0027DeepSeek returned no content: \u0027 + JSON.stringify(input).slice(0, 500));\nlet cleaned = String(content).trim();\nconst fenced = cleaned.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/);\nif (fenced) cleaned = fenced[1].trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error(\u0027DeepSeek score response is not JSON: \u0027 + cleaned.slice(0, 500));\n}\nconst score_total = Number(parsed.score_total);\nconst confidence = Number(parsed.confidence);\nif (!Number.isFinite(score_total) || score_total \u003c 0 || score_total \u003e 10) throw new Error(\u0027Invalid score_total: \u0027 + score_total);\nif (!Number.isFinite(confidence) || confidence \u003c 0 || confidence \u003e 1) throw new Error(\u0027Invalid confidence: \u0027 + confidence);\nif (![\u0027APPLY\u0027, \u0027REVIEW\u0027, \u0027SKIP\u0027].includes(parsed.recommendation)) throw new Error(\u0027Invalid recommendation: \u0027 + parsed.recommendation);\nreturn {\n  score_total,\n  confidence,\n  recommendation: parsed.recommendation,\n  explanation: String(parsed.explanation || \u0027\u0027),\n  factors: parsed.factors || {}\n};"
-                                     },
-                      "id":  "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
-                      "name":  "Parse Score",
-                      "type":  "n8n-nodes-base.code",
-                      "typeVersion":  2,
-                      "position":  [
-                                       1680,
-                                       0
-                                   ],
-                      "notes":  "Validates score_total (0-10), confidence (0-1), recommendation enum. Throws on invalid output so the run shows as failed."
-                  },
-                  {
-                      "parameters":  {
-                                         "method":  "POST",
-                                         "url":  "={{$env.SUPABASE_URL}}/rest/v1/job_scores",
-                                         "sendHeaders":  true,
-                                         "headerParameters":  {
-                                                                  "parameters":  [
-                                                                                     {
-                                                                                         "name":  "Content-Type",
-                                                                                         "value":  "application/json"
-                                                                                     },
-                                                                                     {
-                                                                                         "name":  "apikey",
-                                                                                         "value":  "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
-                                                                                     },
-                                                                                     {
-                                                                                         "name":  "Authorization",
-                                                                                         "value":  "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
-                                                                                     },
-                                                                                     {
-                                                                                         "name":  "Prefer",
-                                                                                         "value":  "return=representation"
-                                                                                     }
-                                                                                 ]
-                                                              },
-                                         "sendBody":  true,
-                                         "specifyBody":  "json",
-                                         "jsonBody":  "={{JSON.stringify({ user_id: $env.OWNER_USER_ID, job_id: $(\u0027Build Score Messages\u0027).first().json.job_id, profile_id: $(\u0027Build Score Messages\u0027).first().json.profile_id, score_total: $json.score_total, confidence: $json.confidence, recommendation: $json.recommendation, explanation: $json.explanation, factors: $json.factors })}}",
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "9b8c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
-                      "name":  "Insert Score",
-                      "type":  "n8n-nodes-base.httpRequest",
-                      "typeVersion":  4.2,
-                      "position":  [
-                                       1960,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "conditions":  {
-                                                            "options":  {
-                                                                            "caseSensitive":  true,
-                                                                            "leftValue":  "",
-                                                                            "typeValidation":  "loose"
-                                                                        },
-                                                            "conditions":  [
-                                                                               {
-                                                                                   "id":  "b0c1d2e3-4f5a-6b7c-8d9e-0f1a2b3c4d5e",
-                                                                                   "leftValue":  "={{$json.score_total}}",
-                                                                                   "rightValue":  "9",
-                                                                                   "operator":  {
-                                                                                                    "type":  "number",
-                                                                                                    "operation":  "gte"
-                                                                                                }
-                                                                               }
-                                                                           ]
-                                                        },
-                                         "options":  {
-
-                                                     }
-                                     },
-                      "id":  "0c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
-                      "name":  "High Score (\u003e= 9)",
-                      "type":  "n8n-nodes-base.if",
-                      "typeVersion":  2.2,
-                      "position":  [
-                                       2240,
-                                       0
-                                   ]
-                  },
-                  {
-                      "parameters":  {
-                                         "operation":  "send",
-                                         "options":  {
-                                                         "senderType":  "me"
-                                                     },
-                                         "message":  {
-                                                         "to":  "={{$env.RADAR_EMAIL}}",
-                                                         "subject":  "=Upwork Radar hot job: {{$(\u0027Build Score Messages\u0027).first().json.job.title}} ({{$json.score_total}})",
-                                                         "emailType":  "html",
-                                                         "message":  "=\u003cp\u003e\u003cstrong\u003e{{$(\u0027Build Score Messages\u0027).first().json.job.title}}\u003c/strong\u003e\u003c/p\u003e\u003cp\u003eScore: \u003cstrong\u003e{{$json.score_total}}/10\u003c/strong\u003e - {{$json.recommendation}}\u003c/p\u003e\u003cp\u003e{{$json.explanation}}\u003c/p\u003e\u003cp\u003eBudget: {{$(\u0027Build Score Messages\u0027).first().json.job.budget_min ?? \u0027?\u0027}}-{{$(\u0027Build Score Messages\u0027).first().json.job.budget_max ?? \u0027?\u0027}} {{$(\u0027Build Score Messages\u0027).first().json.job.budget_type ?? \u0027\u0027}}\u003c/p\u003e\u003cp\u003e\u003ca href=\"{{$(\u0027Build Score Messages\u0027).first().json.job.url}}\"\u003eOpen job on Upwork\u003c/a\u003e\u003c/p\u003e"
-                                                     }
-                                     },
-                      "id":  "1d2e3f4a-5b6c-7d8e-9f0a-1b2c3d4e5f6a",
-                      "name":  "Instant Alert (Gmail)",
-                      "type":  "n8n-nodes-base.gmail",
-                      "typeVersion":  2.1,
-                      "position":  [
-                                       2520,
-                                       -200
-                                   ],
-                      "notes":  "Reuse the same Gmail OAuth2 credential as the intake trigger."
-                  }
-              ],
-    "connections":  {
-                        "When Called From Intake":  {
-                                                        "main":  [
-                                                                     [
-                                                                         {
-                                                                             "node":  "Normalize Job Input",
-                                                                             "type":  "main",
-                                                                             "index":  0
-                                                                         }
-                                                                     ]
-                                                                 ]
-                                                    },
-                        "Normalize Job Input":  {
-                                                    "main":  [
-                                                                 [
-                                                                     {
-                                                                         "node":  "Load Profile",
-                                                                         "type":  "main",
-                                                                         "index":  0
-                                                                     }
-                                                                 ]
-                                                             ]
-                                                },
-                        "Load Profile":  {
-                                             "main":  [
-                                                          [
-                                                              {
-                                                                  "node":  "Load Portfolio",
-                                                                  "type":  "main",
-                                                                  "index":  0
-                                                              }
-                                                          ]
-                                                      ]
-                                         },
-                        "Load Portfolio":  {
-                                               "main":  [
-                                                            [
-                                                                {
-                                                                    "node":  "Build Score Messages",
-                                                                    "type":  "main",
-                                                                    "index":  0
-                                                                }
-                                                            ]
-                                                        ]
-                                           },
-                        "Build Score Messages":  {
-                                                     "main":  [
-                                                                  [
-                                                                      {
-                                                                          "node":  "DeepSeek Score",
-                                                                          "type":  "main",
-                                                                          "index":  0
-                                                                      }
-                                                                  ]
-                                                              ]
-                                                 },
-                        "DeepSeek Score":  {
-                                               "main":  [
-                                                            [
-                                                                {
-                                                                    "node":  "Parse Score",
-                                                                    "type":  "main",
-                                                                    "index":  0
-                                                                }
-                                                            ]
-                                                        ]
-                                           },
-                        "Parse Score":  {
-                                            "main":  [
-                                                         [
-                                                             {
-                                                                 "node":  "Insert Score",
-                                                                 "type":  "main",
-                                                                 "index":  0
-                                                             }
-                                                         ]
-                                                     ]
-                                        },
-                        "Insert Score":  {
-                                             "main":  [
-                                                          [
-                                                              {
-                                                                  "node":  "High Score (\u003e= 9)",
-                                                                  "type":  "main",
-                                                                  "index":  0
-                                                              }
-                                                          ]
-                                                      ]
-                                         },
-                        "High Score (\u003e= 9)":  {
-                                                       "main":  [
-                                                                    [
-                                                                        {
-                                                                            "node":  "Instant Alert (Gmail)",
-                                                                            "type":  "main",
-                                                                            "index":  0
-                                                                        }
-                                                                    ],
-                                                                    [
-
-                                                                    ]
-                                                                ]
-                                                   }
+{
+    "name": "02 - Scoring (jobs -> job_scores)",
+    "nodes": [
+        {
+            "parameters": {},
+            "id": "2a1b3c4d-5e6f-7a8b-9c0d-1e2f3a4b5c6d",
+            "name": "When Called From Intake",
+            "type": "n8n-nodes-base.executeWorkflowTrigger",
+            "typeVersion": 1.1,
+            "position": [
+                0,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "mode": "runOnceForAllItems",
+                "jsCode": "// Normalize the job row handed over by the intake workflow.\nconst input = $input.first().json;\nconst job = Array.isArray(input) ? input[0] : input;\nconst job_id = job.id || job.job_id;\nif (!job_id) throw new Error('No job_id received from intake workflow');\nreturn { job_id, job };"
+            },
+            "id": "3b2c4d5e-6f7a-8b9c-0d1e-2f3a4b5c6d7e",
+            "name": "Normalize Job Input",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                280,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "method": "GET",
+                "url": "={{$env.SUPABASE_URL}}/rest/v1/profiles?select=*&is_default=eq.true&user_id=eq.{{$env.OWNER_USER_ID}}&limit=1",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "4c3d5e6f-7a8b-9c0d-1e2f-3a4b5c6d7e8f",
+            "name": "Load Profile",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                560,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "method": "GET",
+                "url": "={{$env.SUPABASE_URL}}/rest/v1/portfolio_projects?select=*&user_id=eq.{{$env.OWNER_USER_ID}}",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "5d4e6f7a-8b9c-0d1e-2f3a-4b5c6d7e8f9a",
+            "name": "Load Portfolio",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                840,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "mode": "runOnceForAllItems",
+                "jsCode": "const { job_id, job } = $('Normalize Job Input').first().json;\nconst profileRows = $('Load Profile').first().json;\nconst portfolioRows = $('Load Portfolio').first().json;\nconst profile = Array.isArray(profileRows) ? profileRows[0] : profileRows;\nconst portfolio = Array.isArray(portfolioRows) ? portfolioRows : (portfolioRows ? [portfolioRows] : []);\nif (!profile || !profile.id) throw new Error('Profile not found - run 03_seed.sql first');\n\nfunction fmtBudget() {\n  if (job.budget_type === 'hourly') {\n    if (job.budget_min == null && job.budget_max == null) return 'not given';\n    return '$' + (job.budget_min ?? '?') + '-' + '$' + (job.budget_max ?? '?') + '/hr';\n  }\n  if (job.budget_type === 'salary') {\n    if (job.budget_min == null && job.budget_max == null) return 'not given';\n    return '$' + (job.budget_min ?? '?') + '-' + '$' + (job.budget_max ?? '?') + '/yr (salary)';\n  }\n  if (job.budget_min == null && job.budget_max == null) return 'not given';\n  return '$' + (job.budget_min ?? '?') + '-' + '$' + (job.budget_max ?? '?') + ' (fixed)';\n}\n\nfunction fmtProjects(list) {\n  return list.map(function (p) {\n    return '- project id: ' + p.id +\n      '\\ntitle: ' + p.title +\n      '\\ndescription: ' + (p.description || '-') +\n      '\\nskills: ' + ((p.skills || []).join(', ') || '-') +\n      '\\nstrength: ' + p.strength +\n      '\\nimplementation_status: ' + p.implementation_status +\n      '\\ncan_claim_text: ' + p.can_claim_text +\n      '\\ncannot_claim_text: ' + (p.cannot_claim_text || 'none');\n  }).join('\\n\\n');\n}\n\nconst SYSTEM = `You are a senior Upwork consultant. You evaluate a job posting against a single freelancer profile and their verified portfolio. Your goal is an honest fit score, never an inflated one.\n\nScoring rubric - factors and weights:\n- portfolio_match (25%): how directly the freelancer's portfolio matches the work requested\n- skill_match (20%): overlap between requested skills and the freelancer's stated skills\n- experience (15%): relevant experience suggested by the profile and portfolio\n- client_quality (10%): rating, reviews, hire rate, jobs posted (unknown data must not be assumed good)\n- budget_fit (10%): posted budget or salary vs the freelancer's target rate range. For salaried roles, compare annual salary to equivalent hourly rate.\n- requirements_fit (10%): how realistic the job requirements are\n- competition (5%): proposal count - high competition lowers the score\n- red_flags (5%): anything suspicious or a strong mismatch lowers the score\n\nRules:\n- Score each factor 0-10. score_total is the weighted sum, 0-10, one decimal place.\n- confidence is 0-1 and reflects data completeness (missing budget, rating, or hire history lowers it).\n- recommendation must be exactly one of APPLY, REVIEW, SKIP.\n- Map score_total to bands: 8.0-10.0 -> APPLY; 7.0-7.9 -> REVIEW; 6.0-6.9 -> REVIEW (usually skip); 0-5.9 -> SKIP.\n- explanation: 2-4 sentences, human-readable, listing the strongest reasons for the score, the biggest gaps, and any red flags. State clearly what is unknown.\n- Never invent facts that are not present in the input.\n\nReturn STRICT JSON only, with exactly this shape:\n{\"score_total\": number, \"confidence\": number, \"recommendation\": \"APPLY\"|\"REVIEW\"|\"SKIP\", \"explanation\": string, \"factors\": {\"portfolio_match\": number, \"skill_match\": number, \"experience\": number, \"client_quality\": number, \"budget_fit\": number, \"requirements_fit\": number, \"competition\": number, \"red_flags\": number}}`;\n\nconst user = `JOB:\n- title: ${job.title}\n- description: ${job.description}\n- skills_requested: ${(job.skills_requested || []).join(', ') || 'none listed'}\n- budget_type: ${job.budget_type || 'not given'}\n- budget: ${fmtBudget()}\n- client_rating: ${job.client_rating ?? 'not given'}\n- client_reviews_count: ${job.client_reviews_count ?? 'not given'}\n- client_jobs_posted: ${job.client_jobs_posted ?? 'not given'}\n- client_hire_rate: ${job.client_hire_rate ?? 'not given'}\n- proposals_count: ${job.proposals_count ?? 'not given'}\n- posted_at: ${job.posted_at}\n- url: ${job.url}\n\nPROFILE:\n- name: ${profile.name}\n- headline: ${profile.headline}\n- services: ${(profile.services || []).join(', ')}\n- niches: ${(profile.niches || []).join(', ')}\n- target_rate_min: ${profile.target_rate_min ?? 'not set'}\n- target_rate_max: ${profile.target_rate_max ?? 'not set'}\n\nVERIFIED PORTFOLIO:\n${fmtProjects(portfolio) || 'no portfolio projects added yet'}\n\nScore this job honestly. Return STRICT JSON.`;\n\nreturn { job_id, profile_id: profile.id, messages: [\n  { role: 'system', content: SYSTEM },\n  { role: 'user', content: user }\n] };\n"
+            },
+            "id": "6e5f7a8b-9c0d-1e2f-3a4b-5c6d7e8f9a0b",
+            "name": "Build Score Messages",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1120,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "https://api.deepseek.com/chat/completions",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "=Bearer {{$env.DEEPSEEK_API_KEY}}"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{JSON.stringify({ model: 'deepseek-chat', temperature: 0.3, response_format: { type: 'json_object' }, messages: $json.messages })}}",
+                "options": {}
+            },
+            "id": "7f6a8b9c-0d1e-2f3a-4b5c-6d7e8f9a0b1c",
+            "name": "DeepSeek Score",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1400,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "mode": "runOnceForAllItems",
+                "jsCode": "const input = $input.first().json;\nconst content = input && input.choices && input.choices[0]\n  ? (input.choices[0].message && input.choices[0].message.content) || input.choices[0].text\n  : null;\nif (!content) throw new Error('DeepSeek returned no content: ' + JSON.stringify(input).slice(0, 500));\nlet cleaned = String(content).trim();\nconst fenced = cleaned.match(/```(?:json)?\\s*([\\s\\S]*?)\\s*```/);\nif (fenced) cleaned = fenced[1].trim();\nlet parsed;\ntry {\n  parsed = JSON.parse(cleaned);\n} catch (e) {\n  throw new Error('DeepSeek score response is not JSON: ' + cleaned.slice(0, 500));\n}\nconst score_total = Number(parsed.score_total);\nconst confidence = Number(parsed.confidence);\nif (!Number.isFinite(score_total) || score_total < 0 || score_total > 10) throw new Error('Invalid score_total: ' + score_total);\nif (!Number.isFinite(confidence) || confidence < 0 || confidence > 1) throw new Error('Invalid confidence: ' + confidence);\nif (!['APPLY', 'REVIEW', 'SKIP'].includes(parsed.recommendation)) throw new Error('Invalid recommendation: ' + parsed.recommendation);\nreturn {\n  score_total,\n  confidence,\n  recommendation: parsed.recommendation,\n  explanation: String(parsed.explanation || ''),\n  factors: parsed.factors || {}\n};"
+            },
+            "id": "8a7b9c0d-1e2f-3a4b-5c6d-7e8f9a0b1c2d",
+            "name": "Parse Score",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1680,
+                0
+            ],
+            "notes": "Validates score_total (0-10), confidence (0-1), recommendation enum. Throws on invalid output so the run shows as failed."
+        },
+        {
+            "parameters": {
+                "method": "POST",
+                "url": "={{$env.SUPABASE_URL}}/rest/v1/job_scores",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "apikey",
+                            "value": "={{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "=Bearer {{$env.SUPABASE_SERVICE_ROLE_KEY}}"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=representation"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={{JSON.stringify({ user_id: $env.OWNER_USER_ID, job_id: $('Build Score Messages').first().json.job_id, profile_id: $('Build Score Messages').first().json.profile_id, score_total: $json.score_total, confidence: $json.confidence, recommendation: $json.recommendation, explanation: $json.explanation, factors: $json.factors })}}",
+                "options": {}
+            },
+            "id": "9b8c0d1e-2f3a-4b5c-6d7e-8f9a0b1c2d3e",
+            "name": "Insert Score",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1960,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "conditions": {
+                    "options": {
+                        "caseSensitive": true,
+                        "leftValue": "",
+                        "typeValidation": "loose"
                     },
-    "settings":  {
-                     "executionOrder":  "v1"
-                 },
-    "active":  false,
-    "meta":  {
-                 "templateCredsSetupCompleted":  false
-             }
+                    "conditions": [
+                        {
+                            "id": "b0c1d2e3-4f5a-6b7c-8d9e-0f1a2b3c4d5e",
+                            "leftValue": "={{$json.score_total}}",
+                            "rightValue": "9",
+                            "operator": {
+                                "type": "number",
+                                "operation": "gte"
+                            }
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "0c1d2e3f-4a5b-6c7d-8e9f-0a1b2c3d4e5f",
+            "name": "High Score (>= 9)",
+            "type": "n8n-nodes-base.if",
+            "typeVersion": 2.2,
+            "position": [
+                2240,
+                0
+            ]
+        },
+        {
+            "parameters": {
+                "operation": "send",
+                "options": {
+                    "senderType": "me"
+                },
+                "message": {
+                    "to": "={{$env.RADAR_EMAIL}}",
+                    "subject": "=Upwork Radar hot job: {{$('Build Score Messages').first().json.job.title}} ({{$json.score_total}})",
+                    "emailType": "html",
+                    "message": "=<p><strong>{{$('Build Score Messages').first().json.job.title}}</strong></p><p>Score: <strong>{{$json.score_total}}/10</strong> - {{$json.recommendation}}</p><p>{{$json.explanation}}</p><p>Budget: {{$('Build Score Messages').first().json.job.budget_min ?? '?'}}-{{$('Build Score Messages').first().json.job.budget_max ?? '?'}} {{$('Build Score Messages').first().json.job.budget_type ?? ''}}</p><p><a href=\"{{$('Build Score Messages').first().json.job.url}}\">Open job on Upwork</a></p>"
+                }
+            },
+            "id": "1d2e3f4a-5b6c-7d8e-9f0a-1b2c3d4e5f6a",
+            "name": "Instant Alert (Gmail)",
+            "type": "n8n-nodes-base.gmail",
+            "typeVersion": 2.1,
+            "position": [
+                2520,
+                -200
+            ],
+            "notes": "Reuse the same Gmail OAuth2 credential as the intake trigger."
+        }
+    ],
+    "connections": {
+        "When Called From Intake": {
+            "main": [
+                [
+                    {
+                        "node": "Normalize Job Input",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Normalize Job Input": {
+            "main": [
+                [
+                    {
+                        "node": "Load Profile",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Load Profile": {
+            "main": [
+                [
+                    {
+                        "node": "Load Portfolio",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Load Portfolio": {
+            "main": [
+                [
+                    {
+                        "node": "Build Score Messages",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Build Score Messages": {
+            "main": [
+                [
+                    {
+                        "node": "DeepSeek Score",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "DeepSeek Score": {
+            "main": [
+                [
+                    {
+                        "node": "Parse Score",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Parse Score": {
+            "main": [
+                [
+                    {
+                        "node": "Insert Score",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Insert Score": {
+            "main": [
+                [
+                    {
+                        "node": "High Score (>= 9)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "High Score (>= 9)": {
+            "main": [
+                [
+                    {
+                        "node": "Instant Alert (Gmail)",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                []
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    },
+    "active": false,
+    "meta": {
+        "templateCredsSetupCompleted": false
+    }
 }

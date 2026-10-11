@@ -169,6 +169,7 @@ export interface JobFeedRow extends JobRow {
   factors: ScoreFactor | null;
   score_created_at: string | null;
   score_profile_id: string | null;
+  min_persona_score: number | null;
   persona_scores: PersonaScore[] | null;
   persona_score_count: number;
   proposal_id: string | null;

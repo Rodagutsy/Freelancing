@@ -20,7 +20,7 @@ export interface FilterState {
 
 export const DEFAULT_FILTERS: FilterState = {
   score: "0",
-  posted: "0",
+  posted: "1440",
   budget: "",
   rating: "",
   status: "all",
@@ -39,6 +39,9 @@ const POSTED_OPTIONS = [
   { value: "24", label: "Last 24 hours" },
   { value: "48", label: "Last 48 hours" },
   { value: "168", label: "Last 7 days" },
+  { value: "720", label: "Last 30 days" },
+  { value: "1440", label: "Last 60 days" },
+  { value: "2160", label: "Last 90 days" },
   { value: "0", label: "Any time" },
 ];
 

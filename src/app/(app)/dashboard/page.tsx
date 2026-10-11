@@ -3,7 +3,7 @@ import { ArrowRight, CircleAlert, CircleCheck, CircleX } from "lucide-react";
 import { createClient } from "@/lib/supabase/server";
 import { greetingForHour } from "@/lib/utils";
 import { getDashboardStats, listJobs } from "@/lib/services/jobs";
-import { getDefaultProfile } from "@/lib/services/settings";
+import { getDefaultProfile, getProfiles } from "@/lib/services/settings";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/common/Button";
 import { JobCard } from "@/components/jobs/JobCard";
@@ -15,11 +15,20 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const supabase = await createClient();
 
+  const profiles = await getProfiles(supabase);
+  const personaCount = profiles.length;
+
   const [stats, applyNow, review, latest, profile] = await Promise.all([
-    getDashboardStats(supabase),
-    listJobs(supabase, { status: "apply", limit: 5 }),
-    listJobs(supabase, { status: "review", limit: 5 }),
-    listJobs(supabase, { status: "all", postedHours: 0, sort: "ingested", limit: 5 }),
+    getDashboardStats(supabase, personaCount),
+    listJobs(supabase, { status: "apply", personaCount, limit: 5 }),
+    listJobs(supabase, { status: "review", personaCount, limit: 5 }),
+    listJobs(supabase, {
+      status: "all",
+      postedHours: 0,
+      personaCount,
+      sort: "ingested",
+      limit: 5,
+    }),
     getDefaultProfile(supabase),
   ]);
 

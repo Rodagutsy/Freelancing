@@ -3,7 +3,7 @@ import { z } from "zod";
 export const jobFiltersSchema = z.object({
   scoreMin: z.coerce.number().min(0).max(10).optional(),
   scoreMax: z.coerce.number().min(0).max(10).optional(),
-  postedHours: z.coerce.number().int().min(1).max(720).optional(),
+  postedHours: z.coerce.number().int().min(1).max(2160).optional(),
   budgetMin: z.coerce.number().min(0).optional(),
   clientRating: z.coerce.number().min(0).max(5).optional(),
   skills: z.array(z.string().trim().min(1)).max(20).optional(),

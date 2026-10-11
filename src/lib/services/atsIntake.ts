@@ -28,6 +28,7 @@ export interface AtsIntakeSummary {
   jobsFound: number;
   jobsNew: number;
   jobsScored: number;
+  jobsPurged: number;
   errors: Array<{ company: string; error: string }>;
   capped: boolean;
   /** True when new jobs were imported but left unscored (weekly budget spent). */
@@ -209,6 +210,15 @@ export function matchesKeywords(job: AtsJob): boolean {
   return ATS_KEYWORDS.some((kw) => text.includes(kw));
 }
 
+/** True when the posting is young enough to bother with. Unknown dates are kept. */
+function isFreshEnough(postedAt: string, maxAgeDays: number): boolean {
+  if (maxAgeDays <= 0) return true;
+  const time = Date.parse(postedAt);
+  if (Number.isNaN(time)) return true;
+  const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+  return time >= cutoff;
+}
+
 /* ------------------------------------------------------------------ */
 /* Orchestration                                                       */
 /* ------------------------------------------------------------------ */
@@ -219,6 +229,8 @@ interface RunOptions {
   /** Skip fetching if polled within this many minutes (cron dedup). */
   minAgeMinutes?: number;
   concurrency?: number;
+  /** Skip scraped postings older than this many days. 0 disables the check. */
+  maxAgeDays?: number;
 }
 
 async function mapWithConcurrency<T, R>(
@@ -259,6 +271,7 @@ export async function runAtsIntake(
   const maxCompanies = options.maxCompanies ?? 40;
   const concurrency = options.concurrency ?? 5;
   const minAgeMinutes = options.minAgeMinutes ?? 0;
+  const maxAgeDays = options.maxAgeDays ?? 60;
 
   let query = client
     .from("watched_companies")
@@ -290,6 +303,7 @@ export async function runAtsIntake(
     jobsFound: 0,
     jobsNew: 0,
     jobsScored: 0,
+    jobsPurged: 0,
     errors: [],
     capped,
     scoresCapped: false,
@@ -317,7 +331,9 @@ export async function runAtsIntake(
 
     try {
       const scraped = await scrapeCompany(company);
-      jobs = scraped.filter((job) => job.url && matchesKeywords(job));
+      jobs = scraped.filter(
+        (job) => job.url && matchesKeywords(job) && isFreshEnough(job.posted_at, maxAgeDays),
+      );
       if (company.platform === "personio" || company.platform === "unknown") {
         status = "unsupported";
       }
@@ -427,7 +443,67 @@ export async function runAtsIntake(
     0,
   );
 
+  // Ongoing cleanup: drop stale leads (older than the intake window) that were
+  // never acted on, so old postings stop accumulating in the jobs list.
+  if (maxAgeDays > 0) {
+    const cutoff = new Date(
+      Date.now() - maxAgeDays * 24 * 60 * 60 * 1000,
+    ).toISOString();
+    const userIds = Array.from(new Set(companies.map((c) => c.user_id)));
+    try {
+      summary.jobsPurged = await purgeStaleJobs(client, userIds, cutoff);
+    } catch (error) {
+      summary.errors.push({
+        company: "stale-job cleanup",
+        error: error instanceof Error ? error.message : "Purge failed.",
+      });
+    }
+  }
+
   return summary;
+}
+
+/**
+ * Deletes jobs older than `cutoff` for the given users, preserving any job that
+ * has a proposal or an application (those represent real work). Cascades remove
+ * their orphaned scores.
+ */
+async function purgeStaleJobs(
+  client: DatabaseClient,
+  userIds: string[],
+  cutoff: string,
+): Promise<number> {
+  let purged = 0;
+  for (const userId of userIds) {
+    const [{ data: oldJobs }, { data: proposals }, { data: applications }] =
+      await Promise.all([
+        client
+          .from("jobs")
+          .select("id")
+          .eq("user_id", userId)
+          .lt("posted_at", cutoff),
+        client.from("proposals").select("job_id").eq("user_id", userId),
+        client.from("applications").select("job_id").eq("user_id", userId),
+      ]);
+
+    const kept = new Set<string>();
+    for (const row of proposals ?? []) {
+      if (row.job_id) kept.add(row.job_id as string);
+    }
+    for (const row of applications ?? []) {
+      if (row.job_id) kept.add(row.job_id as string);
+    }
+
+    const doomed = (oldJobs ?? [])
+      .filter((row) => !kept.has(row.id as string))
+      .map((row) => row.id as string);
+    if (doomed.length === 0) continue;
+
+    const { error } = await client.from("jobs").delete().in("id", doomed);
+    if (error) throw new Error(error.message);
+    purged += doomed.length;
+  }
+  return purged;
 }
 
 /** Convenience: the jobs table row shape used when normalizing an ATS job. */

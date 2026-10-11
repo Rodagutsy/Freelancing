@@ -6,6 +6,7 @@
  * - INTAKE_MAX_COMPANIES   default 40
  * - INTAKE_MIN_AGE_MINUTES default 25 (cron mode only; manual runs always use 0)
  * - INTAKE_CONCURRENCY     default 5
+ * - INTAKE_MAX_AGE_DAYS    default 60 (skip postings older than this; 0 = no limit)
  */
 export type IntakeMode = "cron" | "manual";
 
@@ -13,6 +14,8 @@ export interface IntakeRunOptions {
   maxCompanies: number;
   minAgeMinutes: number;
   concurrency: number;
+  /** Skip scraped postings older than this many days. 0 disables the check. */
+  maxAgeDays: number;
 }
 
 function intFromEnv(name: string, fallback: number): number {
@@ -28,5 +31,6 @@ export function getIntakeRunOptions(mode: IntakeMode = "cron"): IntakeRunOptions
     minAgeMinutes:
       mode === "manual" ? 0 : intFromEnv("INTAKE_MIN_AGE_MINUTES", 25),
     concurrency: intFromEnv("INTAKE_CONCURRENCY", 5),
+    maxAgeDays: intFromEnv("INTAKE_MAX_AGE_DAYS", 60),
   };
 }

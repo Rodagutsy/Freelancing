@@ -17,10 +17,25 @@ export interface JobListQuery {
   status?: "apply" | "review" | "skip" | "all";
   /** Restrict to jobs that have a score for this persona. */
   profileId?: string;
+  /**
+   * Hide jobs whose LOWEST latest persona score is below this floor, so a job
+   * that flops for any one persona never shows. Defaults to 5. Pass null to
+   * disable the floor entirely.
+   */
+  minPersonaScore?: number | null;
+  /**
+   * When set (and > 0), only include jobs that have been scored by at least
+   * this many personas — i.e. jobs that aren't fully scored yet stay hidden.
+   */
+  personaCount?: number;
   page?: number;
   limit?: number;
   sort?: "score_desc" | "newest" | "ingested";
 }
+
+/** Default fit floor across personas + default recency window. */
+export const DEFAULT_MIN_PERSONA_SCORE = 5;
+export const DEFAULT_POSTED_HOURS = 1440; // 60 days
 
 export interface JobListResult {
   items: JobFeedRow[];
@@ -49,6 +64,21 @@ export async function listJobs(
 
   let q = client.from("job_feed").select("*", { count: "exact" });
 
+  // Persona-wide fit floor: drop any job scoring below the floor for ANY
+  // persona (min_persona_score is NULL when a job has no scores, which the
+  // comparison excludes). Requiring persona_score_count hides jobs that aren't
+  // scored by every persona yet.
+  const floor =
+    query.minPersonaScore === null
+      ? undefined
+      : (query.minPersonaScore ?? DEFAULT_MIN_PERSONA_SCORE);
+  if (floor !== undefined) {
+    q = q.gte("min_persona_score", floor);
+  }
+  if (query.personaCount && query.personaCount > 0) {
+    q = q.gte("persona_score_count", query.personaCount);
+  }
+
   const band = STATUS_BANDS[query.status ?? "all"] ?? null;
   const min = query.scoreMin ?? band?.min;
   const max = query.scoreMax ?? band?.max;
@@ -74,9 +104,12 @@ export async function listJobs(
     if (max !== undefined) q = q.lte("score_total", max);
   }
 
-  if (query.postedHours && query.postedHours > 0) {
+  // Default to the last 60 days so stale leads don't linger; an explicit 0
+  // means "any time".
+  const postedHours = query.postedHours ?? DEFAULT_POSTED_HOURS;
+  if (postedHours > 0) {
     const cutoff = new Date(
-      Date.now() - query.postedHours * 60 * 60 * 1000,
+      Date.now() - postedHours * 60 * 60 * 1000,
     ).toISOString();
     q = q.gte("posted_at", cutoff);
   }
@@ -230,17 +263,24 @@ export interface DashboardStats {
 
 export async function getDashboardStats(
   client: DatabaseClient,
+  personaCount = 0,
 ): Promise<DashboardStats> {
   const startOfDay = new Date();
   startOfDay.setHours(0, 0, 0, 0);
   const today = startOfDay.toISOString();
 
+  let highFitQuery = client
+    .from("job_feed")
+    .select("*", { count: "exact", head: true })
+    .gte("score_total", 7)
+    .gte("min_persona_score", DEFAULT_MIN_PERSONA_SCORE);
+  if (personaCount > 0) {
+    highFitQuery = highFitQuery.gte("persona_score_count", personaCount);
+  }
+
   const [{ count: jobsAnalyzed }, { count: highFit }] = await Promise.all([
     client.from("jobs").select("*", { count: "exact", head: true }),
-    client
-      .from("job_feed")
-      .select("*", { count: "exact", head: true })
-      .gte("score_total", 7),
+    highFitQuery,
   ]);
 
   const [{ count: proposalsDrafted }, { count: applicationsLogged }] =
